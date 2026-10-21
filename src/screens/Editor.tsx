@@ -1,4 +1,4 @@
-import { Ellipsis, FileText, ListMusic, Play, Redo2, Settings2, Square, Trash, Undo2 } from "lucide-react";
+import { Ellipsis, FileText, ListMusic, Redo2, Settings2, SkipBack, Trash, Undo2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { NavBar } from "@/components/layout";
@@ -11,11 +11,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PlayButton } from "@/editor/PlayButton";
 import { Staff } from "@/editor/Staff";
 import { Toolbar, type ToolTab } from "@/editor/Toolbar";
 import { useEditor } from "@/editor/useEditor";
 import { play, schedule, unlockAudio } from "@/lib/audio";
 import { navigate, paths } from "@/lib/router";
+import { isEmpty, nextCursor } from "@/lib/score";
 import { deleteScore, getScore, prefs } from "@/lib/storage";
 import type { Cursor, Score } from "@/lib/types";
 
@@ -96,6 +98,9 @@ function Editor({ initial, params }: { initial: Score; params: URLSearchParams }
     });
   };
 
+  /** From the selected note; from the beginning if nothing is written from there on. */
+  const playFromSelection = () => togglePlay(hasMusicFrom(score, cursor) ? cursor : undefined);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement | null)?.tagName === "INPUT") return;
@@ -135,15 +140,12 @@ function Editor({ initial, params }: { initial: Score; params: URLSearchParams }
             <Button variant="ghost" size="icon" aria-label="Повторить" disabled={!editor.canRedo} onClick={actions.redo}>
               <Redo2 className="size-[22px]" />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={playing ? "Остановить" : "Слушать партию"}
-              aria-pressed={playing}
-              onClick={() => togglePlay()}
-            >
-              {playing ? <Square className="size-5 fill-current" /> : <Play className="size-6 fill-current" />}
-            </Button>
+            <PlayButton
+              playing={playing}
+              onPressStart={unlockAudio}
+              onPlay={(fromStart) => (fromStart ? togglePlay() : playFromSelection())}
+              onStop={stop}
+            />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" aria-label="Ещё">
@@ -151,6 +153,9 @@ function Editor({ initial, params }: { initial: Score; params: URLSearchParams }
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => togglePlay()}>
+                  <SkipBack /> Слушать с начала
+                </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => togglePlay({ m: cursor.m, e: 0 })}>
                   <ListMusic /> Слушать с такта {cursor.m + 1}
                 </DropdownMenuItem>
@@ -176,21 +181,21 @@ function Editor({ initial, params }: { initial: Score; params: URLSearchParams }
       />
       <main ref={scroller} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2.5 pt-3 pb-6">
         <article className="rounded-lg bg-paper px-2.5 pt-5 pb-3 text-ink shadow-paper">
-          <header className="px-2 pb-1 text-center">
-            <h1 ref={titleRef} className="font-sheet text-title2 font-bold leading-tight">
+          <header className="px-2 pb-1">
+            <h1 ref={titleRef} className="text-center font-sheet text-title2 font-bold leading-tight">
               {score.title}
             </h1>
             {(score.composer || score.arranger) && (
-              <p className="mt-1 font-sheet text-footnote opacity-70">
-                {[score.composer && `Музыка: ${score.composer}`, score.arranger && `Партия: ${score.arranger}`]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
+              <div className="mt-1 text-right font-sheet text-footnote">
+                {score.composer && <p>{score.composer}</p>}
+                {score.arranger && <p className="opacity-70">Партия: {score.arranger}</p>}
+              </div>
             )}
           </header>
           <Staff
             score={score}
             cursor={cursor}
+            after={editor.after}
             playing={playhead}
             flash={editor.flash}
             notice={editor.notice}
@@ -216,4 +221,10 @@ function Editor({ initial, params }: { initial: Score; params: URLSearchParams }
       />
     </div>
   );
+}
+
+function hasMusicFrom(score: Score, from: Cursor) {
+  for (let c: Cursor | null = from; c; c = nextCursor(score, c))
+    if (!isEmpty(score.measures[c.m].events[c.e])) return true;
+  return false;
 }

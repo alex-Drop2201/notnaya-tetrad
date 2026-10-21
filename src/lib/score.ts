@@ -17,8 +17,8 @@ const NOTICES = {
 
 export const ERRORS = {
   notANote: "Выберите ноту, а не паузу",
-  tieDifferent: "Лига соединяет две одинаковые ноты. Следующая нота другая",
-  tieEnd: "После этой ноты нечего соединять лигой",
+  nothingSelected: "Выберите ноту или паузу",
+  tieEnd: "Дальше ничего нет — лигу не к чему вести",
   dotSixteenth: "Точку у шестнадцатой в этом редакторе не ставим",
 };
 
@@ -59,6 +59,11 @@ export function createScore(params: NewScore, now = new Date().toISOString()): S
 
 export function eventAt(score: Score, at: Cursor): NoteEvent | undefined {
   return score.measures[at.m]?.events[at.e];
+}
+
+/** Empty time: a rest the editor filled in, or an empty measure. Shown as blank space in the editor. */
+export function isEmpty(ev: NoteEvent | undefined) {
+  return !ev || (ev.rest && (!!ev.auto || !!ev.full));
 }
 
 /** Start of the event at `index`, in units from the barline. */
@@ -108,7 +113,7 @@ interface Item {
   units: number;
   pitch?: Pitch;
   finger?: number;
-  /** The note being rewritten was tied onward; keep that tie. */
+  /** The event being rewritten had a tie or slur onward; keep it. */
   tieOut?: boolean;
 }
 
@@ -121,13 +126,17 @@ function itemEvents(
   continues: boolean,
   first: boolean,
 ): NoteEvent[] {
-  if (item.rest) return restDurations(units, offset, time).map((d) => restEvent(d.base, d.dots, !item.userRest));
+  if (item.rest) {
+    const rests = restDurations(units, offset, time).map((d) => restEvent(d.base, d.dots, !item.userRest));
+    if (item.tieOut && !continues) rests[rests.length - 1].tie = true;
+    return rests;
+  }
   const parts = splitUnits(units);
   return parts.map((d, i) => {
     const last = i === parts.length - 1;
     const ev: NoteEvent = { id: uid(), rest: false, base: d.base, dots: d.dots, pitch: { ...item.pitch! } };
     if (!last || continues || item.tieOut) ev.tie = true;
-    if (first && i === 0 && item.finger) ev.finger = item.finger;
+    if (first && i === 0 && item.finger != null) ev.finger = item.finger;
     return ev;
   });
 }
@@ -221,18 +230,18 @@ function mergeFillerRests(events: NoteEvent[], unitsPerMeasure: number, time: Ti
   return out;
 }
 
-/** Rests carry no tie, finger or pitch; a tie survives only onto the same pitch. */
+/**
+ * A tie (same pitch) or slur (anything else, rests included) needs something written
+ * after it: it is dropped before empty time and at the end. Rests carry no finger or pitch.
+ */
 function cleanTies(score: Score) {
   const all = score.measures.flatMap((m) => m.events);
   all.forEach((ev, i) => {
     if (ev.rest) {
-      delete ev.tie;
       delete ev.finger;
       delete ev.pitch;
-      return;
     }
-    const next = all[i + 1];
-    if (ev.tie && !(next && !next.rest && samePitch(ev.pitch, next.pitch))) delete ev.tie;
+    if (ev.tie && (isEmpty(ev) || isEmpty(all[i + 1]))) delete ev.tie;
   });
 }
 
@@ -280,13 +289,13 @@ export function setDuration(score: Score, at: Cursor, base: Base, dots: boolean)
   if (dots && base === 16) return { score, cursor: at, error: ERRORS.dotSixteenth };
   const units = durationUnits(base, dots);
   const w = ev.rest
-    ? write(score, at, { rest: true, userRest: true, units })
+    ? write(score, at, { rest: true, userRest: true, units, tieOut: ev.tie })
     : write(score, at, { rest: false, units, pitch: ev.pitch, finger: ev.finger, tieOut: ev.tie });
   const notice = w.split ? (ev.rest ? NOTICES.restSplit : NOTICES.split) : undefined;
   return normalize(w.score, w.first, { changed: w.first, notice });
 }
 
-/** Turns the selected event into a filler rest of the same length. */
+/** Turns the selected event into empty time of the same length. */
 export function clearEvent(score: Score, at: Cursor): EditResult {
   const ev = eventAt(score, at);
   if (!ev || (ev.rest && ev.auto)) return { score, cursor: at };
@@ -295,11 +304,51 @@ export function clearEvent(score: Score, at: Cursor): EditResult {
   });
 }
 
+/** Nearest written event at or before `at` (skipping empty time), or null. */
+function writtenAtOrBefore(score: Score, at: Cursor | null): Cursor | null {
+  let c = at;
+  while (c && isEmpty(eventAt(score, c))) c = prevCursor(score, c);
+  return c;
+}
+
+/** What Backspace would delete from here: the selected event, or the last one written before an empty slot. */
+export function backspaceTarget(score: Score, at: Cursor) {
+  return writtenAtOrBefore(score, at);
+}
+
+/**
+ * Backspace, as in text: clears the event at the cursor (on an empty slot, the last
+ * event written before it), leaves empty time in its place and moves to the event
+ * before it. `after` tells the editor that the next note goes after that event.
+ */
+export function backspace(score: Score, at: Cursor): EditResult & { after: boolean } {
+  const target = backspaceTarget(score, at);
+  if (!target) return { score, cursor: at, after: false };
+  const cleared = clearEvent(score, target);
+  const previous = writtenAtOrBefore(cleared.score, prevCursor(cleared.score, cleared.cursor));
+  return previous
+    ? { ...cleared, cursor: previous, changed: undefined, after: true }
+    : { ...cleared, changed: undefined, after: false };
+}
+
+/** Where the next note goes when the caret is after the event at `at`. Adds a measure at the end. */
+export function slotAfter(score: Score, at: Cursor): { score: Score; at: Cursor } {
+  const next = nextCursor(score, at);
+  if (next) return { score, at: next };
+  const grown = structuredClone(score);
+  grown.measures.push(emptyMeasure(true));
+  return { score: grown, at: { m: grown.measures.length - 1, e: 0 } };
+}
+
 /** Applies `edit` to the selected note; `edit` returns an error message to refuse. */
 function editNote(score: Score, at: Cursor, edit: (ev: NoteEvent, score: Score) => string | null | void): EditResult {
   const ev = eventAt(score, at);
   if (!ev) return { score, cursor: at };
   if (ev.rest) return { score, cursor: at, error: ERRORS.notANote };
+  return editEvent(score, at, edit);
+}
+
+function editEvent(score: Score, at: Cursor, edit: (ev: NoteEvent, score: Score) => string | null | void): EditResult {
   const next = structuredClone(score);
   const error = edit(next.measures[at.m].events[at.e], next);
   return error ? { score, cursor: at, error } : normalize(next, at, { changed: at });
@@ -344,19 +393,21 @@ export function setFinger(score: Score, at: Cursor, finger: number | null) {
   });
 }
 
-/** Ties the selected note to the next one, or unties it. A rest after it becomes the same note. */
+/**
+ * Puts a лига from the selected note or rest to the next event, or removes it. Onto the
+ * same pitch it is a tie (one long sound); onto another note or a rest it is a slur.
+ * From a note into empty time, the note is continued there and tied.
+ */
 export function toggleTie(score: Score, at: Cursor): EditResult {
   const ev = eventAt(score, at);
   if (!ev) return { score, cursor: at };
-  if (ev.rest) return { score, cursor: at, error: ERRORS.notANote };
-  if (ev.tie) return editNote(score, at, (e) => void delete e.tie);
+  if (isEmpty(ev)) return { score, cursor: at, error: ERRORS.nothingSelected };
+  if (ev.tie) return editEvent(score, at, (e) => void delete e.tie);
   const nextAt = nextCursor(score, at);
   if (!nextAt) return { score, cursor: at, error: ERRORS.tieEnd };
   const next = eventAt(score, nextAt)!;
-  if (!next.rest)
-    return samePitch(ev.pitch, next.pitch)
-      ? editNote(score, at, (e) => void (e.tie = true))
-      : { score, cursor: at, error: ERRORS.tieDifferent };
+  if (!isEmpty(next)) return editEvent(score, at, (e) => void (e.tie = true));
+  if (ev.rest) return { score, cursor: at, error: ERRORS.tieEnd };
   const w = write(score, nextAt, { rest: false, units: eventUnits(next, measureUnits(score.time)), pitch: ev.pitch });
   w.score.measures[at.m].events[at.e].tie = true;
   return normalize(w.score, at, { changed: at });

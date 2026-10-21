@@ -15,7 +15,8 @@ import {
 } from "vexflow/bravura";
 import { vexDuration } from "./durations";
 import { diatonicOf, KEY_SPECS, keyAlter, samePitch, vexKey } from "./pitch";
-import type { Cursor, Measure, Score } from "./types";
+import { isEmpty } from "./score";
+import type { Cursor, Measure, Pitch, Score } from "./types";
 
 // Engraving with VexFlow: measures are laid out into systems (lines of staff),
 // then drawn as SVG. The same code draws the editor, the previews and the PDF pages.
@@ -26,7 +27,6 @@ const SPACE = 10;
 
 export interface StaffColors {
   ink: string;
-  muted: string;
   selected: string;
   playing: string;
 }
@@ -45,7 +45,7 @@ export interface EngraveOptions {
   final?: boolean;
   selected?: Cursor | null;
   playing?: Cursor | null;
-  /** Editor view: grey out filler rests. */
+  /** Editor view: empty time is left blank instead of printed as rests. */
   editor?: boolean;
 }
 
@@ -81,21 +81,22 @@ function timeSpec(score: Score) {
 /** Accidentals to print: those that differ from the key or from earlier in the measure. */
 function accidentalsFor(measures: Measure[], fifths: number) {
   const shown = new Map<string, string>();
-  let tied = false;
+  // A note tied over from the same pitch repeats no accidental; after a slur it does.
+  let tiedFrom: Pitch | undefined;
   for (const measure of measures) {
     const inMeasure = new Map<number, number>();
     for (const ev of measure.events) {
       if (ev.rest || !ev.pitch) {
-        tied = false;
+        tiedFrom = undefined;
         continue;
       }
       const p = ev.pitch;
       const pos = diatonicOf(p);
-      if (!tied && (inMeasure.get(pos) ?? keyAlter(fifths, p.step)) !== p.alter) {
+      if (!samePitch(tiedFrom, p) && (inMeasure.get(pos) ?? keyAlter(fifths, p.step)) !== p.alter) {
         shown.set(ev.id, p.alter === 1 ? "#" : p.alter === -1 ? "b" : "n");
         inMeasure.set(pos, p.alter);
       }
-      tied = !!ev.tie;
+      tiedFrom = ev.tie ? p : undefined;
     }
   }
   return shown;
@@ -136,7 +137,7 @@ function buildMeasure(score: Score, measure: Measure, index: number, accidentals
     });
     const acc = accidentals.get(ev.id);
     if (acc) note.addModifier(new Accidental(acc), 0);
-    if (ev.finger) {
+    if (ev.finger != null) {
       hasFinger = true;
       note.addModifier(
         new Annotation(String(ev.finger)).setFont("Times", 11, "bold").setVerticalJustification(Annotation.VerticalJustify.TOP),
@@ -290,12 +291,12 @@ function drawSystems(
         const ev = measure.events[e];
         const selected = opts.selected && opts.selected.m === bm.index && opts.selected.e === e;
         const color =
-          opts.playing && opts.playing.m === bm.index && opts.playing.e === e
-            ? opts.colors.playing
-            : selected
-              ? opts.colors.selected
-              : opts.editor && ev.rest && ev.auto
-                ? opts.colors.muted
+          opts.editor && isEmpty(ev)
+            ? "transparent"
+            : opts.playing && opts.playing.m === bm.index && opts.playing.e === e
+              ? opts.colors.playing
+              : selected
+                ? opts.colors.selected
                 : opts.colors.ink;
         note.setStyle({ fillStyle: color, strokeStyle: color });
         note.setLedgerLineStyle({ fillStyle: opts.colors.ink, strokeStyle: opts.colors.ink });
@@ -327,10 +328,11 @@ function drawSystems(
     }
     y += systemHeight(sys) + (opts.systemGap ?? 8);
   }
+  // Ties and slurs: an arc from each event marked `tie` to the next written one.
   const events = measures.flatMap((m) => m.events);
   events.forEach((ev, i) => {
     const next = events[i + 1];
-    if (!ev.tie || !next || next.rest || !samePitch(ev.pitch, next.pitch)) return;
+    if (!ev.tie || isEmpty(ev) || isEmpty(next)) return;
     const from = drawn.get(ev.id);
     const to = drawn.get(next.id);
     if (!from && !to) return;
@@ -425,7 +427,7 @@ export function renderPage(
 function readStaffColors(): StaffColors {
   const style = getComputedStyle(document.documentElement);
   const v = (name: string) => style.getPropertyValue(name).trim();
-  return { ink: v("--ink"), muted: v("--ink-muted"), selected: v("--accent"), playing: v("--playing") };
+  return { ink: v("--ink"), selected: v("--accent"), playing: v("--playing") };
 }
 
 /** Staff colors from the theme, updated when the phone switches light/dark. */

@@ -50,4 +50,4 @@ The original source was not in GitHub; only the build was. This source was recon
 
 ## Credits
 
-Violin samples FluidR3 GM (Frank Wen, CC BY 3.0) via MIDI.js Soundfonts; engraving VexFlow (MIT); PT Serif (ParaType, OFL).
+Violin samples FluidR3 GM (Frank Wen, CC BY 3.0) via MIDI.js Soundfonts, with the vibrato removed, tuned to A440 and lengthened — see `scripts/samples/`. Engraving VexFlow (MIT); PT Serif (ParaType, OFL).

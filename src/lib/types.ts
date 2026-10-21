@@ -26,9 +26,9 @@ export interface NoteEvent {
   /** Rest the editor filled in by itself, as opposed to one the user entered. */
   auto?: boolean;
   pitch?: Pitch;
-  /** Tied to the next event. */
+  /** Лига to the next event: a tie onto the same pitch, otherwise a slur (also to or from a rest). */
   tie?: boolean;
-  /** Fingering, 1–4. */
+  /** Fingering: 0 (open string) to 4. */
   finger?: number;
 }
 

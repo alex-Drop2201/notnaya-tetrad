@@ -2,8 +2,8 @@ import { paginate, prepareLayout, renderPage, type EngraveOptions } from "./engr
 import { visibleMeasures } from "./score";
 import type { Score } from "./types";
 
-// A4 PDF: title centered, composer and arranger on the right, part name before the
-// first system, title and page number in the footer of the following pages.
+// A4 PDF: title centered, composer and arranger in the top right corner, part name before
+// the first system, title and page number in the footer of the following pages.
 
 const fontRegularUrl = new URL("../assets/fonts/PTSerif-Regular.ttf", import.meta.url).href;
 const fontBoldUrl = new URL("../assets/fonts/PTSerif-Bold.ttf", import.meta.url).href;
@@ -60,12 +60,11 @@ export async function exportPdf(score: Score) {
     systemGap: SYSTEM_GAP,
     maxPerSystem: 4,
     justifyLast: 0.3,
-    colors: { ink: black, muted: black, selected: black, playing: black },
+    colors: { ink: black, selected: black, playing: black },
   };
   const systems = prepareLayout(score, measures, opts);
-  const credits = [score.composer && `Музыка: ${score.composer}`, score.arranger && `Партия: ${score.arranger}`].filter(
-    Boolean,
-  ) as string[];
+  // Top right, as on printed parts: the composer, then who wrote this part.
+  const credits = [score.composer, score.arranger && `Партия: ${score.arranger}`].filter(Boolean) as string[];
   const headerHeight = (34 + (credits.length ? credits.length * 13 + 6 : 8)) / SCALE;
   const pages = paginate(systems, height, headerHeight, SYSTEM_GAP);
 

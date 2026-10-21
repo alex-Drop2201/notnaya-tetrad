@@ -6,4 +6,4 @@ Open https://alex-drop2201.github.io/notnaya-tetrad/ in Safari on iPhone, then S
 
 To change the app, work in the `source` branch and run `npm run deploy` there — see its README.
 
-Credits: violin samples FluidR3 GM (Frank Wen, CC BY 3.0) via MIDI.js Soundfonts; engraving VexFlow (MIT); PT Serif (ParaType, OFL).
+Credits: violin samples FluidR3 GM (Frank Wen, CC BY 3.0) via MIDI.js Soundfonts, with the vibrato removed, tuned to A440 and lengthened (see `scripts/samples` in the `source` branch); engraving VexFlow (MIT); PT Serif (ParaType, OFL).

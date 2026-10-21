@@ -91,7 +91,7 @@ export function ScoreForm({ value, onChange, mode, titleError, timeChanged }: Sc
         </p>
       </div>
 
-      <Group title="Песня" footer={titleError ? undefined : "Название, авторы и партия попадут в шапку PDF."}>
+      <Group title="Песня" footer={titleError ? undefined : "Композитор и автор партии встанут в правый верхний угол листа и PDF."}>
         <Row label="Название" className="pr-4">
           <Input
             ref={titleRef}
@@ -105,7 +105,7 @@ export function ScoreForm({ value, onChange, mode, titleError, timeChanged }: Sc
             enterKeyHint="next"
           />
         </Row>
-        <Row label="Автор музыки">
+        <Row label="Композитор">
           <Input
             value={value.composer}
             onChange={(e) => set("composer", e.target.value)}

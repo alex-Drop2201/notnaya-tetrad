@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { previewNote } from "@/lib/audio";
 import { midiOf } from "@/lib/pitch";
 import {
+  backspace,
+  backspaceTarget,
   clampCursor,
-  clearEvent,
   deleteMeasure,
   duplicateMeasure,
   ERRORS,
@@ -18,6 +19,7 @@ import {
   setFinger,
   setPitch,
   shiftPitch,
+  slotAfter,
   toggleRepeat,
   toggleTie,
 } from "@/lib/score";
@@ -26,6 +28,10 @@ import type { Base, Cursor, Dots, EditResult, NoteEvent, Pitch, Score } from "@/
 
 // Editor state: the score, the cursor, the chosen note value, undo/redo and the message
 // line. Saving is debounced and flushed when the page is hidden.
+//
+// The cursor selects one event. After Backspace it selects the event before the deleted
+// one with `after` set: like a text caret after that event, the next note or rest is
+// written into the empty place behind it, and note values don't change it.
 
 export interface NoteValue {
   base: Base;
@@ -72,6 +78,12 @@ export function useEditor(initial: Score, initialCursor?: Cursor) {
   });
   const [notice, setNotice] = useState<EditorNotice | null>(null);
   const [flash, setFlash] = useState<Cursor | null>(null);
+  const [after, setAfterState] = useState(false);
+  const afterRef = useRef(after);
+  const setAfter = (v: boolean) => {
+    afterRef.current = v;
+    setAfterState(v);
+  };
   const current = useRef(state);
   current.current = state;
 
@@ -142,10 +154,18 @@ export function useEditor(initial: Score, initialCursor?: Cursor) {
   };
 
   const selected = eventAt(state.score, state.cursor);
-  const editable = isEditable(selected);
+  const editable = isEditable(selected) && !after;
+  const deleteTarget = eventAt(state.score, backspaceTarget(state.score, state.cursor) ?? { m: -1, e: -1 });
+
+  /** Where a new note or rest goes: the cursor, or the empty place after it. */
+  const insertionPoint = () => {
+    const s = current.current;
+    return afterRef.current ? slotAfter(s.score, s.cursor) : { score: s.score, at: s.cursor };
+  };
 
   const actions = {
     select(at: Cursor) {
+      setAfter(false);
       setState((s) => ({ ...s, cursor: clampCursor(s.score, at) }));
       const ev = eventAt(current.current.score, at);
       if (ev?.pitch) previewNote(midiOf(ev.pitch));
@@ -158,12 +178,14 @@ export function useEditor(initial: Score, initialCursor?: Cursor) {
       if (to) actions.select(to);
     },
     enterNote(pitch: Pitch, at?: Cursor) {
-      const s = current.current;
-      return apply(enterNote(s.score, at ?? s.cursor, pitch, value.base, !!value.dots), { sound: true });
+      const p = at ? { score: current.current.score, at } : insertionPoint();
+      const ok = apply(enterNote(p.score, p.at, pitch, value.base, !!value.dots), { sound: true });
+      if (ok) setAfter(false);
+      return ok;
     },
     enterRest() {
-      const s = current.current;
-      apply(enterRest(s.score, s.cursor, value.base, !!value.dots));
+      const p = insertionPoint();
+      if (apply(enterRest(p.score, p.at, value.base, !!value.dots))) setAfter(false);
     },
     chooseValue(base: Base) {
       const dots: Dots = base === 16 ? 0 : value.dots;
@@ -185,9 +207,13 @@ export function useEditor(initial: Score, initialCursor?: Cursor) {
         apply(setDuration(s.score, s.cursor, value.base, !!dots), { sound: true });
       }
     },
+    /** Backspace: deletes the selected event (or the last one before an empty place) and steps back. */
     remove() {
       const s = current.current;
-      apply(clearEvent(s.score, s.cursor));
+      const result = backspace(s.score, s.cursor);
+      if (result.score === s.score) return;
+      apply(result);
+      setAfter(result.after);
     },
     setPitch(at: Cursor, pitch: Pitch) {
       const s = current.current;
@@ -211,14 +237,17 @@ export function useEditor(initial: Score, initialCursor?: Cursor) {
     },
     addMeasure() {
       const s = current.current;
+      setAfter(false);
       apply(insertMeasure(s.score, s.cursor));
     },
     duplicateMeasure() {
       const s = current.current;
+      setAfter(false);
       apply(duplicateMeasure(s.score, s.cursor));
     },
     deleteMeasure() {
       const s = current.current;
+      setAfter(false);
       apply(deleteMeasure(s.score, s.cursor));
     },
     repeat(side: "start" | "end") {
@@ -231,6 +260,7 @@ export function useEditor(initial: Score, initialCursor?: Cursor) {
       setUndoStack((s) => s.slice(0, -1));
       setRedoStack((s) => [current.current, ...s]);
       setState(prev);
+      setAfter(false);
       scheduleSave(prev.score);
       setNotice(null);
     },
@@ -240,6 +270,7 @@ export function useEditor(initial: Score, initialCursor?: Cursor) {
       setRedoStack((s) => s.slice(1));
       setUndoStack((s) => [...s, current.current]);
       setState(next);
+      setAfter(false);
       scheduleSave(next.score);
     },
     error(text: string) {
@@ -254,6 +285,10 @@ export function useEditor(initial: Score, initialCursor?: Cursor) {
     score: state.score,
     cursor: state.cursor,
     selected,
+    /** The caret is after the selected event (see above). */
+    after,
+    /** What Backspace deletes now, if anything. */
+    deleteTarget,
     value,
     notice,
     flash,

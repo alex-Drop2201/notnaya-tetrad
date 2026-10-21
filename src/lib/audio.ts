@@ -3,8 +3,9 @@ import { midiOf } from "./pitch";
 import { visibleMeasures } from "./score";
 import type { Cursor, Score } from "./types";
 
-// Playback with violin samples (public/samples/violin, one every minor third).
-// Each note plays the nearest sample, re-pitched; long notes loop the sustain.
+// Playback with violin samples (public/samples/violin, one every minor third, without
+// vibrato, 6 s long). Each note plays the nearest sample, re-pitched; notes longer than
+// a sample loop its steady part.
 
 interface Step {
   start: number;
@@ -13,6 +14,8 @@ interface Step {
   midi: number | null;
   /** Events this sound covers (a tied note covers several), for the playhead. */
   at: { cursor: Cursor; start: number }[];
+  /** Slurred to the next note: played connected, without a gap. */
+  legato?: boolean;
 }
 
 /** Order of measures with repeats unfolded; each repeat is taken once. */
@@ -55,9 +58,10 @@ export function schedule(score: Score, from: Cursor = { m: 0, e: 0 }): Step[] {
       } else if (open && open.midi === midiOf(ev.pitch!)) {
         open.duration += duration;
         open.at.push({ cursor, start: t });
+        open.legato = ev.tie;
         if (!ev.tie) open = null;
       } else {
-        const step: Step = { start: t, duration, midi: midiOf(ev.pitch!), at: [{ cursor, start: t }] };
+        const step: Step = { start: t, duration, midi: midiOf(ev.pitch!), at: [{ cursor, start: t }], legato: ev.tie };
         steps.push(step);
         open = ev.tie ? step : null;
       }
@@ -134,6 +138,11 @@ function nearestSample(midi: number) {
   return best;
 }
 
+const LOOP_START = 1.2;
+const LOOP_LENGTH = 3.5;
+const ATTACK = 0.045;
+const RELEASE = 0.07;
+
 function playNote(midi: number, when: number, duration: number, volume = 0.8) {
   const ctx = audio();
   const sample = nearestSample(midi);
@@ -142,20 +151,24 @@ function playNote(midi: number, when: number, duration: number, volume = 0.8) {
   const src = ctx.createBufferSource();
   src.buffer = buffer;
   src.playbackRate.value = 2 ** ((midi - sample) / 12);
-  if (duration > buffer.duration / src.playbackRate.value - 0.25) {
+  if (duration > buffer.duration / src.playbackRate.value - 0.5) {
+    // The samples have a steady pitch, so a loop of a whole number of periods joins
+    // without a click wherever it starts.
+    const period = 1 / (440 * 2 ** ((sample - 69) / 12));
     src.loop = true;
-    src.loopStart = 1;
-    src.loopEnd = Math.min(2.8, buffer.duration - 0.1);
+    src.loopStart = LOOP_START;
+    src.loopEnd = LOOP_START + Math.round(LOOP_LENGTH / period) * period;
   }
+  // Bow on, steady stroke, bow off.
   const gain = ctx.createGain();
   const end = when + duration;
   gain.gain.setValueAtTime(0, when);
-  gain.gain.linearRampToValueAtTime(volume, when + 0.025);
-  gain.gain.setValueAtTime(volume, Math.max(when + 0.03, end - 0.04));
-  gain.gain.exponentialRampToValueAtTime(0.0008, end + 0.14);
+  gain.gain.linearRampToValueAtTime(volume, when + ATTACK);
+  gain.gain.setValueAtTime(volume, Math.max(when + ATTACK, end - 0.02));
+  gain.gain.setTargetAtTime(0, end, RELEASE);
   src.connect(gain).connect(master);
   src.start(when);
-  src.stop(end + 0.16);
+  src.stop(end + RELEASE * 7);
   return {
     stop(at = ctx.currentTime) {
       gain.gain.cancelScheduledValues(at);
@@ -185,7 +198,10 @@ export async function play(steps: Step[], onCursor: (c: Cursor | null) => void, 
   await loadSamples();
   const ctx = audio();
   const t0 = ctx.currentTime + 0.12;
-  const voices = steps.filter((s) => s.midi !== null).map((s) => playNote(s.midi!, t0 + s.start, s.duration * 0.97));
+  // Detached notes leave a short breath between bow strokes; slurred ones join the next.
+  const voices = steps
+    .filter((s) => s.midi !== null)
+    .map((s) => playNote(s.midi!, t0 + s.start, s.legato ? s.duration + 0.03 : s.duration * 0.97));
   const marks = steps.flatMap((s) => s.at);
   const total = steps.length ? steps[steps.length - 1].start + steps[steps.length - 1].duration : 0;
   let frame = 0;

@@ -12,7 +12,8 @@ export function AboutSheet({ open, onClose }: { open: boolean; onClose: () => vo
         <div className="space-y-3 px-5 pb-4 text-subhead text-muted-foreground">
           <p>Партии хранятся только на этом телефоне. Время от времени сохраняйте копию через меню «Ещё» на главном экране.</p>
           <p>
-            Звук скрипки: FluidR3 GM (Frank Wen), лицензия CC BY 3.0, в обработке MIDI.js Soundfonts. Нотная графика: VexFlow (MIT).
+            Звук скрипки: FluidR3 GM (Frank Wen), лицензия CC BY 3.0, в обработке MIDI.js Soundfonts; вибрато убрано, строй выровнен по
+            ля 440 Гц. Нотная графика: VexFlow (MIT).
             Шрифт заголовков в PDF: PT Serif (ParaType, OFL).
           </p>
           <Button size="lg" variant="secondary" onClick={onClose}>

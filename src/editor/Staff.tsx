@@ -18,6 +18,8 @@ const SCALE = 1.1;
 interface StaffProps {
   score: Score;
   cursor: Cursor;
+  /** The caret is after the selected event: the next note goes into the place behind it. */
+  after: boolean;
   playing: Cursor | null;
   flash: Cursor | null;
   notice: EditorNotice | null;
@@ -41,7 +43,7 @@ interface Gesture {
   last: number;
 }
 
-export function Staff({ score, cursor, playing, flash, notice, onSelect, onPlace, onRepitch, onError }: StaffProps) {
+export function Staff({ score, cursor, after, playing, flash, notice, onSelect, onPlace, onRepitch, onError }: StaffProps) {
   const [wrapRef, width] = useWidth();
   const svgHost = useRef<HTMLDivElement>(null);
   const colors = useStaffColors();
@@ -186,6 +188,17 @@ export function Staff({ score, cursor, playing, flash, notice, onSelect, onPlace
   return (
     <div ref={wrapRef} className="relative select-none">
       {band(hit && !playing ? hit : undefined, "bg-select-soft")}
+      {hit && system && after && !playing && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute w-0.5 rounded-full bg-select animate-in fade-in-0"
+          style={{
+            left: hit.x1 * SCALE - 1,
+            top: (system.staffTop - system.spacing * 1.5) * SCALE,
+            height: system.spacing * 7 * SCALE,
+          }}
+        />
+      )}
       {band(playingHit, "bg-playing-soft")}
       {band(flashHit, "bg-warning-soft animate-pulse")}
       <div

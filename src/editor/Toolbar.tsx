@@ -14,6 +14,7 @@ import {
 } from "@/components/glyphs";
 import { DURATION_NAMES } from "@/lib/durations";
 import { fromMidi, midiOf, pitchLabel } from "@/lib/pitch";
+import { isEmpty } from "@/lib/score";
 import { prefs } from "@/lib/storage";
 import type { Base } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -33,6 +34,8 @@ const TABS: { id: ToolTab; label: string }[] = [
 ];
 
 const BASES: Base[] = [1, 2, 4, 8, 16];
+/** 0 is the open string. */
+const FINGERS = [0, 1, 2, 3, 4];
 const OCTAVE_KEY = "nt.octave";
 const VALUE_NAMES: Record<Base, string> = {
   1: "целая",
@@ -50,8 +53,9 @@ interface ToolbarProps {
 }
 
 export function Toolbar({ editor, tab, onTab, onUndo }: ToolbarProps) {
-  const { selected, cursor, value, notice, actions, score } = editor;
+  const { selected, cursor, value, notice, actions, score, deleteTarget } = editor;
   const isNote = !!selected && !selected.rest;
+  const canTie = !!selected && !isEmpty(selected);
   const [octave, setOctaveState] = useState(() => Number(prefs.get(OCTAVE_KEY)) || 4);
   const setOctave = (o: number) => {
     setOctaveState(o);
@@ -132,9 +136,9 @@ export function Toolbar({ editor, tab, onTab, onUndo }: ToolbarProps) {
               <ChevronRight className="size-5" />
             </IconButton>
             <IconButton
-              label={isNote ? "Удалить ноту" : "Удалить паузу"}
+              label={deleteTarget?.rest ? "Удалить паузу" : "Удалить ноту"}
               onClick={actions.remove}
-              disabled={!selected || (selected.rest && (selected.auto || selected.full))}
+              disabled={!deleteTarget}
             >
               <Delete className="size-5" />
             </IconButton>
@@ -205,21 +209,21 @@ export function Toolbar({ editor, tab, onTab, onUndo }: ToolbarProps) {
             <Tool label="Ниже" disabled={!isNote} onClick={() => actions.stepPitch(-1)}>
               <ArrowDown />
             </Tool>
-            <Tool label="Лига" disabled={!isNote} pressed={!!selected?.tie} onClick={actions.tie}>
+            <Tool label="Лига" disabled={!canTie} pressed={!!selected?.tie} onClick={actions.tie}>
               <TieGlyph />
             </Tool>
           </ToolGrid>
         )}
         {tab === "finger" && (
           <div className="flex h-full flex-col">
-            <div className="grid flex-1 grid-cols-5 gap-1.5">
-              {[1, 2, 3, 4].map((f) => (
+            <div className="grid flex-1 grid-cols-6 gap-1.5">
+              {FINGERS.map((f) => (
                 <button
                   key={f}
                   type="button"
                   disabled={!isNote}
                   aria-pressed={selected?.finger === f}
-                  aria-label={`Палец ${f}`}
+                  aria-label={f === 0 ? "Открытая струна, 0" : `Палец ${f}`}
                   onClick={() => actions.finger(f)}
                   className={cn(
                     "rounded-lg bg-fill font-sheet text-[28px] font-bold text-foreground outline-none transition-colors active:bg-fill-strong disabled:opacity-35 focus-visible:ring-2 focus-visible:ring-ring",
@@ -231,7 +235,7 @@ export function Toolbar({ editor, tab, onTab, onUndo }: ToolbarProps) {
               ))}
               <button
                 type="button"
-                disabled={!isNote || !selected?.finger}
+                disabled={!isNote || selected?.finger == null}
                 onClick={() => actions.finger(null)}
                 className="flex flex-col items-center justify-center gap-1 rounded-lg bg-fill text-caption text-foreground outline-none active:bg-fill-strong disabled:opacity-35 focus-visible:ring-2 focus-visible:ring-ring"
               >
