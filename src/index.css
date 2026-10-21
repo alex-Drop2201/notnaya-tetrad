@@ -1,0 +1,213 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* Design tokens. Colors are set on :root below and switch with the system theme. */
+@theme {
+  --default-font-family: var(--font-ui);
+  --font-sheet: var(--font-sheet);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+}
+
+@theme inline {
+  /* iOS text styles. */
+  --text-body: 1.0625rem;
+  --text-body--line-height: 1.375rem;
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1rem;
+  --text-footnote: 0.8125rem;
+  --text-footnote--line-height: 1.125rem;
+  --text-subhead: 0.9375rem;
+  --text-subhead--line-height: 1.25rem;
+  --text-title3: 1.25rem;
+  --text-title3--line-height: 1.5625rem;
+  --text-title2: 1.375rem;
+  --text-title2--line-height: 1.75rem;
+  --text-large-title: 2.125rem;
+  --text-large-title--line-height: 2.5625rem;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-muted: var(--fill);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-faint: var(--faint-foreground);
+  --color-border: var(--separator);
+  --color-input: var(--fill-strong);
+  --color-ring: var(--accent);
+  --color-fill: var(--fill);
+  --color-fill-strong: var(--fill-strong);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-pressed: var(--primary-pressed);
+  /* shadcn's "accent" is the highlight of menu items; the brand accent is "select". */
+  --color-accent: var(--fill);
+  --color-accent-foreground: var(--foreground);
+  --color-select: var(--accent);
+  --color-select-foreground: var(--accent-foreground);
+  --color-select-soft: var(--accent-soft);
+  --color-popover: var(--surface-raised);
+  --color-popover-foreground: var(--foreground);
+  --color-destructive: var(--destructive);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-playing: var(--playing);
+  --color-playing-soft: var(--playing-soft);
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+
+  --shadow-paper: var(--paper-shadow);
+  --shadow-sheet: var(--sheet-shadow);
+}
+
+@layer base {
+  * {
+    border-color: var(--separator);
+    -webkit-tap-highlight-color: transparent;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    background-color: var(--background);
+    font-family: var(--font-ui);
+    color: var(--foreground);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    overscroll-behavior-y: none;
+    -webkit-text-size-adjust: 100%;
+  }
+  ::selection {
+    background: var(--accent-soft);
+    color: inherit;
+  }
+  input,
+  textarea {
+    caret-color: var(--accent);
+    /* 16px or more keeps iOS from zooming into the field. */
+    font-size: max(16px, 1em);
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  button {
+    touch-action: manipulation;
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@utility pt-safe {
+  padding-top: var(--safe-top);
+}
+
+@utility pb-safe {
+  padding-bottom: var(--safe-bottom);
+}
+
+@utility no-scrollbar {
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  scrollbar-width: none;
+}
+
+:root {
+  --background: oklch(96.5% 0.003 255);
+  --surface: oklch(100% 0 0);
+  --surface-raised: oklch(100% 0 0);
+  --foreground: oklch(23% 0.006 255);
+  --muted-foreground: oklch(50% 0.01 255);
+  --faint-foreground: oklch(64% 0.008 255);
+  --separator: oklch(88.5% 0.004 255);
+  --fill: oklch(93.5% 0.004 255);
+  --fill-strong: oklch(90% 0.005 255);
+  --primary: oklch(31% 0.008 255);
+  --primary-foreground: oklch(99% 0 0);
+  --primary-pressed: oklch(24% 0.008 255);
+  --accent: oklch(55% 0.15 256);
+  --accent-foreground: oklch(99% 0 0);
+  --accent-soft: oklch(55% 0.15 256 / 0.12);
+  --playing: oklch(46% 0.12 155);
+  --playing-soft: oklch(60% 0.13 155 / 0.16);
+  --destructive: oklch(56% 0.2 27);
+  --warning: oklch(52% 0.12 70);
+  --warning-soft: oklch(83% 0.11 85 / 0.28);
+  /* The sheet of music: white paper and black ink, also in dark mode (slightly dimmed). */
+  --paper: oklch(100% 0 0);
+  --ink: oklch(17% 0 0);
+  --ink-muted: oklch(74% 0.006 255);
+  --paper-shadow: 0 1px 2px oklch(20% 0.01 255 / 0.06), 0 6px 18px oklch(20% 0.01 255 / 0.07);
+  --sheet-shadow: 0 -1px 0 oklch(20% 0.01 255 / 0.06), 0 -8px 24px oklch(20% 0.01 255 / 0.06);
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+  --font-sheet: "PT Serif", "Times New Roman", Georgia, serif;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: oklch(15% 0.003 255);
+    --surface: oklch(21.5% 0.004 255);
+    --surface-raised: oklch(25% 0.005 255);
+    --foreground: oklch(96% 0.003 255);
+    --muted-foreground: oklch(72% 0.008 255);
+    --faint-foreground: oklch(58% 0.008 255);
+    --separator: oklch(32% 0.005 255);
+    --fill: oklch(28% 0.005 255);
+    --fill-strong: oklch(34% 0.006 255);
+    --primary: oklch(93% 0.004 255);
+    --primary-foreground: oklch(20% 0.006 255);
+    --primary-pressed: oklch(84% 0.004 255);
+    --accent: oklch(55% 0.15 256);
+    --accent-soft: oklch(68% 0.13 256 / 0.2);
+    --playing-soft: oklch(66% 0.13 155 / 0.22);
+    --destructive: oklch(68% 0.18 27);
+    --warning: oklch(80% 0.12 80);
+    --warning-soft: oklch(80% 0.12 80 / 0.16);
+    --paper: oklch(93% 0.004 255);
+    --ink-muted: oklch(66% 0.008 255);
+    --paper-shadow: 0 1px 2px oklch(0% 0 0 / 0.3), 0 8px 24px oklch(0% 0 0 / 0.35);
+    --sheet-shadow: 0 -1px 0 oklch(100% 0 0 / 0.06);
+    color-scheme: dark;
+  }
+}
+
+@font-face {
+  font-family: "PT Serif";
+  src: url("./assets/fonts/PTSerif-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "PT Serif";
+  src: url("./assets/fonts/PTSerif-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
