@@ -16,10 +16,12 @@ import {
 import { vexDuration } from "./durations";
 import { diatonicOf, KEY_SPECS, keyAlter, samePitch, vexKey } from "./pitch";
 import { isEmpty } from "./score";
-import type { Cursor, Measure, Pitch, Score } from "./types";
+import type { Measure, NoteEvent, Pitch, Score } from "./types";
 
 // Engraving with VexFlow: measures are laid out into systems (lines of staff),
 // then drawn as SVG. The same code draws the editor, the previews and the PDF pages.
+// Every note's SVG group gets the id `vf-<event id>`, so the editor can highlight the
+// selected or playing note with a class instead of drawing the score again.
 
 /** Diatonic position of the top staff line, F5. */
 export const STAFF_TOP = 38;
@@ -27,8 +29,6 @@ const SPACE = 10;
 
 export interface StaffColors {
   ink: string;
-  selected: string;
-  playing: string;
 }
 
 export interface EngraveOptions {
@@ -43,8 +43,6 @@ export interface EngraveOptions {
   systemGap?: number;
   /** Draw the final barline after the last measure. */
   final?: boolean;
-  selected?: Cursor | null;
-  playing?: Cursor | null;
   /** Editor view: empty time is left blank instead of printed as rests. */
   editor?: boolean;
 }
@@ -114,36 +112,45 @@ interface BuiltMeasure {
   hasFinger: boolean;
 }
 
+function restNote(ev: NoteEvent) {
+  return new StaveNote({
+    keys: ["b/4"],
+    duration: ev.full ? "wr" : `${vexDuration(ev.base)}${ev.dots ? "d" : ""}r`,
+    align_center: !!ev.full,
+  });
+}
+
+function pitchedNote(ev: NoteEvent, accidental: string | undefined) {
+  const note = new StaveNote({
+    keys: [vexKey(ev.pitch!)],
+    duration: `${vexDuration(ev.base)}${ev.dots ? "d" : ""}`,
+    auto_stem: true,
+    clef: "treble",
+  });
+  if (accidental) note.addModifier(new Accidental(accidental), 0);
+  if (ev.finger != null)
+    note.addModifier(
+      new Annotation(String(ev.finger)).setFont("Times", 11, "bold").setVerticalJustification(Annotation.VerticalJustify.TOP),
+      0,
+    );
+  return note;
+}
+
 function buildMeasure(score: Score, measure: Measure, index: number, accidentals: Map<string, string>): BuiltMeasure {
   let lowest = 4;
   let highest = 0;
   let hasFinger = false;
   const notes = measure.events.map((ev) => {
-    if (ev.rest)
-      return new StaveNote({
-        keys: ["b/4"],
-        duration: ev.full ? "wr" : `${vexDuration(ev.base)}${ev.dots ? "d" : ""}r`,
-        align_center: !!ev.full,
-      });
-    const p = ev.pitch!;
-    const below = (STAFF_TOP - diatonicOf(p)) / 2;
-    lowest = Math.max(lowest, below);
-    highest = Math.min(highest, below);
-    const note = new StaveNote({
-      keys: [vexKey(p)],
-      duration: `${vexDuration(ev.base)}${ev.dots ? "d" : ""}`,
-      auto_stem: true,
-      clef: "treble",
-    });
-    const acc = accidentals.get(ev.id);
-    if (acc) note.addModifier(new Accidental(acc), 0);
-    if (ev.finger != null) {
-      hasFinger = true;
-      note.addModifier(
-        new Annotation(String(ev.finger)).setFont("Times", 11, "bold").setVerticalJustification(Annotation.VerticalJustify.TOP),
-        0,
-      );
+    let note: StaveNote;
+    if (ev.rest) note = restNote(ev);
+    else {
+      const below = (STAFF_TOP - diatonicOf(ev.pitch!)) / 2;
+      lowest = Math.max(lowest, below);
+      highest = Math.min(highest, below);
+      if (ev.finger != null) hasFinger = true;
+      note = pitchedNote(ev, accidentals.get(ev.id));
     }
+    note.setAttribute("id", ev.id);
     return note;
   });
   measure.events.forEach((ev, i) => {
@@ -186,7 +193,12 @@ interface SystemLayout {
   /** Room above and below the staff, in staff spaces. */
   above: number;
   below: number;
+  /** First system: height of the tempo mark's baseline above the top line, in staff spaces. */
+  tempoAt: number;
 }
+
+/** VexFlow puts the tempo mark 2.4 spaces above the top line; it is raised over high notes and fingering. */
+const TEMPO_DEFAULT = 2.4;
 
 function layoutSystems(score: Score, built: BuiltMeasure[], opts: EngraveOptions): SystemLayout[] {
   const firstStart = staveStartX(score, true);
@@ -219,12 +231,17 @@ function layoutSystems(score: Score, built: BuiltMeasure[], opts: EngraveOptions
     const lowest = Math.max(...ms.map((m) => m.lowest));
     const highest = Math.min(...ms.map((m) => m.highest));
     const finger = ms.some((m) => m.hasFinger) ? 1.6 : 0;
+    const above = Math.max(3, -highest + 3.5 + finger);
+    // The tempo mark stands over the first measure: above its highest note and fingering.
+    const first = ms[0];
+    const tempoAt = Math.max(TEMPO_DEFAULT, -first.highest + 0.6 + (first.hasFinger ? 1.8 : 0) + 0.9);
     return {
       measures: ms,
       widths: natural.map((w, j) => w * stretch + (j === 0 ? start : 0)),
       x0: indent,
-      above: Math.max(3, -highest + 3.5 + finger) + +(i === 0),
+      above: i === 0 ? Math.max(above, tempoAt + 2.1) : above,
       below: Math.max(2.5, lowest - 4 + 3),
+      tempoAt,
     };
   });
 }
@@ -259,7 +276,7 @@ function drawSystems(
         stave.addClef("treble").addKeySignature(KEY_SPECS[score.keyFifths]);
         if (si === 0) {
           stave.addTimeSignature(timeSpec(score));
-          stave.setTempo({ duration: "q", bpm: score.tempo }, -4);
+          stave.setTempo({ duration: "q", bpm: score.tempo }, -4 - (sys.tempoAt - TEMPO_DEFAULT) * SPACE);
         }
       } else stave.setBegBarType(BarlineType.NONE);
       if (measure.repeatStart) stave.setBegBarType(BarlineType.REPEAT_BEGIN);
@@ -289,15 +306,7 @@ function drawSystems(
       const centers = bm.notes.map((n) => n.getAbsoluteX() + n.getGlyphWidth() / 2);
       bm.notes.forEach((note, e) => {
         const ev = measure.events[e];
-        const selected = opts.selected && opts.selected.m === bm.index && opts.selected.e === e;
-        const color =
-          opts.editor && isEmpty(ev)
-            ? "transparent"
-            : opts.playing && opts.playing.m === bm.index && opts.playing.e === e
-              ? opts.colors.playing
-              : selected
-                ? opts.colors.selected
-                : opts.colors.ink;
+        const color = opts.editor && isEmpty(ev) ? "transparent" : opts.colors.ink;
         note.setStyle({ fillStyle: color, strokeStyle: color });
         note.setLedgerLineStyle({ fillStyle: opts.colors.ink, strokeStyle: opts.colors.ink });
         const x0 = e === 0 ? stave.getNoteStartX() - 6 : (centers[e - 1] + centers[e]) / 2;
@@ -427,7 +436,7 @@ export function renderPage(
 function readStaffColors(): StaffColors {
   const style = getComputedStyle(document.documentElement);
   const v = (name: string) => style.getPropertyValue(name).trim();
-  return { ink: v("--ink"), selected: v("--accent"), playing: v("--playing") };
+  return { ink: v("--ink") };
 }
 
 /** Staff colors from the theme, updated when the phone switches light/dark. */

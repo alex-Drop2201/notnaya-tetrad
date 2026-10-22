@@ -13,9 +13,12 @@ interface NavBarProps {
   hairline?: boolean;
   /** Space kept free for the back button and actions, [left, right] in px. */
   titleInset?: [number, number];
+  /** The bar title is the screen's main heading (screens without a large title). */
+  titleIsHeading?: boolean;
 }
 
-export function NavBar({ back, title, actions, className, hairline = true, titleInset = [96, 96] }: NavBarProps) {
+export function NavBar({ back, title, actions, className, hairline = true, titleInset = [96, 96], titleIsHeading }: NavBarProps) {
+  const Title = titleIsHeading ? "h1" : "div";
   return (
     <header
       className={cn(
@@ -39,12 +42,12 @@ export function NavBar({ back, title, actions, className, hairline = true, title
           )}
         </div>
         {title && (
-          <div
+          <Title
             className="pointer-events-none absolute truncate text-center text-body font-semibold animate-in fade-in-0 duration-200"
             style={{ left: titleInset[0], right: titleInset[1] }}
           >
             {title}
-          </div>
+          </Title>
         )}
         <div className="flex items-center gap-0.5">{actions}</div>
       </div>

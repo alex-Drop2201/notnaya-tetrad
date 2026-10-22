@@ -15,7 +15,7 @@ export function FormScreen({
 }) {
   return (
     <div className="flex h-full flex-col">
-      <NavBar back={back} title={title} />
+      <NavBar back={back} title={title} titleIsHeading />
       <main className="flex-1 overflow-y-auto pt-4">{children}</main>
       {footer && (
         <div className="pb-safe border-t border-border/70 bg-background/90 px-4 pt-3 pb-3 backdrop-blur-xl">{footer}</div>

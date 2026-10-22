@@ -16,7 +16,7 @@ interface StepperProps {
 export function Stepper({ value, min, max, step = 1, onChange, label, format = String, className }: StepperProps) {
   const set = (v: number) => onChange(Math.min(max, Math.max(min, v)));
   const button =
-    "flex h-9 w-12 items-center justify-center outline-none active:bg-fill-strong disabled:opacity-35 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
+    "flex h-11 w-12 items-center justify-center outline-none active:bg-fill-strong disabled:opacity-35 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
   return (
     <div className={cn("flex items-center gap-3", className)}>
       <span className="tabular min-w-[3ch] text-right text-body text-foreground" aria-live="polite">

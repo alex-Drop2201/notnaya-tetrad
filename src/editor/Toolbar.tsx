@@ -165,12 +165,14 @@ export function Toolbar({ editor, tab, onTab, onUndo }: ToolbarProps) {
           {TABS.map((t) => (
             <button
               key={t.id}
+              id={`tool-tab-${t.id}`}
               type="button"
               role="tab"
               aria-selected={tab === t.id}
+              aria-controls="tool-panel"
               onClick={() => onTab(t.id)}
               className={cn(
-                "h-8 rounded-[7px] text-footnote outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                "h-10 rounded-[7px] text-footnote outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
                 tab === t.id
                   ? "bg-surface-raised font-semibold text-foreground shadow-[0_1px_3px_oklch(0.2_0.01_255/0.14)]"
                   : "text-muted-foreground",
@@ -182,7 +184,7 @@ export function Toolbar({ editor, tab, onTab, onUndo }: ToolbarProps) {
         </div>
       </div>
 
-      <div className="h-[148px] px-3 pt-2 pb-2.5" role="tabpanel">
+      <div className="h-[148px] px-3 pt-2 pb-2.5" role="tabpanel" id="tool-panel" aria-labelledby={`tool-tab-${tab}`}>
         {tab === "keys" && (
           <Piano
             octave={octave}
@@ -244,7 +246,7 @@ export function Toolbar({ editor, tab, onTab, onUndo }: ToolbarProps) {
               </button>
             </div>
             <p className="pt-2 text-center text-footnote text-muted-foreground">
-              {isNote ? "Цифра встанет над нотой. Тот же палец ещё раз — убрать." : "Выберите ноту на нотном стане"}
+              {isNote ? "Повторное нажатие убирает цифру" : "Выберите ноту на нотном стане"}
             </p>
           </div>
         )}
@@ -253,7 +255,7 @@ export function Toolbar({ editor, tab, onTab, onUndo }: ToolbarProps) {
             <Tool label="Добавить" onClick={actions.addMeasure}>
               <Plus />
             </Tool>
-            <Tool label="Повторить" onClick={actions.duplicateMeasure}>
+            <Tool label="Дублировать" onClick={actions.duplicateMeasure}>
               <CopyPlus />
             </Tool>
             <Tool label="Удалить" onClick={actions.deleteMeasure} tone="destructive">

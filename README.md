@@ -40,6 +40,9 @@ src/
   components/   shared UI; ui/ holds the shadcn primitives
 public/         service worker, manifest, icons, violin samples
 deploy/         README and CLAUDE.md copied into the `main` branch on deploy
+scripts/        deploy script; scripts/samples: how the violin samples were made
+docs/AUDIT.md   design audit (Impeccable) and what was fixed
+.claude/        Impeccable design skill for Claude Code
 ```
 
 Parts are stored only on the device (IndexedDB `notnaya-tetrad` / `scores`). The format is `Score` in `src/lib/types.ts` with `schemaVersion: 1`; keep it backward compatible.

@@ -276,6 +276,11 @@ export function useEditor(initial: Score, initialCursor?: Cursor) {
     error(text: string) {
       setNotice({ id: Date.now(), kind: "error", text, at: current.current.cursor });
     },
+    /** Drops the save that is still waiting, so a deleted part isn't written back on leaving. */
+    discardPendingSave() {
+      window.clearTimeout(timer.current);
+      pending.current = null;
+    },
     dismissNotice() {
       setNotice(null);
     },

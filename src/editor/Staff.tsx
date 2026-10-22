@@ -58,6 +58,8 @@ export function Staff({ score, cursor, after, playing, flash, notice, onSelect, 
   const gesture = useRef<Gesture | null>(null);
   const zoneRef = useRef<HTMLDivElement>(null);
 
+  // Drawing a long part takes a while on a phone, so it happens only when the music,
+  // the width or the theme changes. Selection and playhead are a class on the note.
   useLayoutEffect(() => {
     if (!svgHost.current || width <= 0) return;
     const result = renderScore(svgHost.current, score, score.measures, SCALE, {
@@ -66,13 +68,20 @@ export function Staff({ score, cursor, after, playing, flash, notice, onSelect, 
       topPad: 22,
       systemGap: 6,
       colors,
-      selected: playing ? null : cursor,
-      playing,
       editor: true,
     });
     setHits(result.hits);
     setSystems(result.layout.systems);
-  }, [score, cursor, playing, width, colors]);
+  }, [score, width, colors]);
+
+  useLayoutEffect(() => {
+    const host = svgHost.current;
+    if (!host) return;
+    host.querySelectorAll(".nt-selected, .nt-playing").forEach((el) => el.classList.remove("nt-selected", "nt-playing"));
+    const at = playing ?? cursor;
+    const ev = score.measures[at.m]?.events[at.e];
+    if (ev) host.querySelector(`#vf-${CSS.escape(ev.id)}`)?.classList.add(playing ? "nt-playing" : "nt-selected");
+  }, [score, cursor, playing, hits]);
 
   const hit = hits.find((h) => h.m === cursor.m && h.e === cursor.e);
   const system = hit ? systems.find((s) => s.index === hit.system) : undefined;

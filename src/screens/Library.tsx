@@ -210,7 +210,7 @@ function ScoreCard({ score, onOpen, onDuplicate, onPdf, onDelete }: ScoreCardPro
       >
         <div className="px-3 pt-3">
           <div ref={previewRef} className="h-[78px] overflow-hidden rounded-md bg-paper px-2">
-            {previewWidth > 0 && <ScorePreview score={score} width={previewWidth - 16} />}
+            {previewWidth > 0 && <ScorePreview score={score} width={previewWidth - 16} height={78} />}
           </div>
         </div>
         <div className="px-4 pt-2.5 pb-3 pr-14">

@@ -73,6 +73,10 @@
   #root {
     height: 100%;
   }
+  /* No double-tap zoom on quick repeated taps (piano keys); pinch zoom stays available. */
+  html {
+    touch-action: manipulation;
+  }
   body {
     background-color: var(--background);
     font-family: var(--font-ui);
@@ -128,7 +132,7 @@
   --surface-raised: oklch(100% 0 0);
   --foreground: oklch(23% 0.006 255);
   --muted-foreground: oklch(50% 0.01 255);
-  --faint-foreground: oklch(64% 0.008 255);
+  --faint-foreground: oklch(55% 0.008 255);
   --separator: oklch(88.5% 0.004 255);
   --fill: oklch(93.5% 0.004 255);
   --fill-strong: oklch(90% 0.005 255);
@@ -140,7 +144,7 @@
   --accent-soft: oklch(55% 0.15 256 / 0.12);
   --playing: oklch(46% 0.12 155);
   --playing-soft: oklch(60% 0.13 155 / 0.16);
-  --destructive: oklch(56% 0.2 27);
+  --destructive: oklch(52% 0.2 27);
   --warning: oklch(52% 0.12 70);
   --warning-soft: oklch(83% 0.11 85 / 0.28);
   /* The sheet of music: white paper and black ink, also in dark mode (slightly dimmed). */
@@ -166,7 +170,7 @@
     --surface-raised: oklch(25% 0.005 255);
     --foreground: oklch(96% 0.003 255);
     --muted-foreground: oklch(72% 0.008 255);
-    --faint-foreground: oklch(58% 0.008 255);
+    --faint-foreground: oklch(64% 0.008 255);
     --separator: oklch(32% 0.005 255);
     --fill: oklch(28% 0.005 255);
     --fill-strong: oklch(34% 0.006 255);
@@ -200,8 +204,19 @@
   font-display: swap;
 }
 
+/* Selected and playing note on the staff (SVG drawn by VexFlow; see editor/Staff.tsx). */
+.nt-selected {
+  fill: var(--accent);
+  stroke: var(--accent);
+}
+.nt-playing {
+  fill: var(--playing);
+  stroke: var(--playing);
+}
+
+/* Decorative motion off; progress that tells the user something (data-progress) keeps its timing. */
 @media (prefers-reduced-motion: reduce) {
-  *,
+  *:not([data-progress]),
   ::before,
   ::after {
     transition-duration: 0.01ms !important;

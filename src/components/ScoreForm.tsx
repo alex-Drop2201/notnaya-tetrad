@@ -129,14 +129,14 @@ export function ScoreForm({ value, onChange, mode, titleError, timeChanged }: Sc
       )}
 
       <Group title="Тональность" footer={`${capitalize(keyTitle(value.keyFifths))} или ${RELATIVE_MINOR[value.keyFifths]}`}>
-        <div className="space-y-2 p-3">
+        <div className="space-y-2 p-2.5">
           <KeyButton fifths={0} selected={value.keyFifths === 0} onPick={(f) => set("keyFifths", f)} wide />
-          <div className="grid grid-cols-7 gap-1.5">
+          <div className="grid grid-cols-7 gap-1">
             {[1, 2, 3, 4, 5, 6, 7].map((n) => (
               <KeyButton key={n} fifths={n} selected={value.keyFifths === n} onPick={(f) => set("keyFifths", f)} />
             ))}
           </div>
-          <div className="grid grid-cols-7 gap-1.5">
+          <div className="grid grid-cols-7 gap-1">
             {[1, 2, 3, 4, 5, 6, 7].map((n) => (
               <KeyButton key={n} fifths={-n} selected={value.keyFifths === -n} onPick={(f) => set("keyFifths", f)} />
             ))}
@@ -177,20 +177,21 @@ export function ScoreForm({ value, onChange, mode, titleError, timeChanged }: Sc
                 onChange={(beats) => set("time", { beats, beatType: value.time.beatType })}
               />
             </Row>
-            <Row label="Длительность доли">
+            <Row label="Доля">
               <div className="flex overflow-hidden rounded-md bg-fill p-0.5">
-                {[2, 4, 8].map((beatType) => (
+                {([2, 4, 8] as const).map((beatType) => (
                   <button
                     key={beatType}
                     type="button"
                     onClick={() => set("time", { beats: value.time.beats, beatType })}
                     aria-pressed={value.time.beatType === beatType}
+                    aria-label={beatType === 2 ? "половинная" : beatType === 4 ? "четверть" : "восьмая"}
                     className={cn(
-                      "h-8 min-w-12 rounded-[7px] px-2 text-subhead outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      value.time.beatType === beatType && "bg-surface-raised font-semibold shadow-[0_1px_3px_oklch(0.2_0.01_255/0.14)]",
+                      "flex h-10 w-12 items-center justify-center rounded-[7px] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      value.time.beatType === beatType && "bg-surface-raised shadow-[0_1px_3px_oklch(0.2_0.01_255/0.14)]",
                     )}
                   >
-                    {beatType === 2 ? "половинная" : beatType === 4 ? "четверть" : "восьмая"}
+                    <NoteGlyph base={beatType} className="size-6" />
                   </button>
                 ))}
               </div>

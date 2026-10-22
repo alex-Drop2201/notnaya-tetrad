@@ -72,7 +72,7 @@ export function Piano({ octave, onOctave, activeMidi, onKey, onOutOfRange }: Pia
   };
 
   const arrow =
-    "flex size-9 items-center justify-center rounded-full outline-none active:bg-fill disabled:opacity-30 focus-visible:ring-2 focus-visible:ring-ring";
+    "-my-1 flex size-11 items-center justify-center rounded-full outline-none active:bg-fill disabled:opacity-30 focus-visible:ring-2 focus-visible:ring-ring";
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-9 items-center justify-between">
@@ -141,7 +141,7 @@ function Octave({ octave, activeMidi, onPress }: { octave: number; activeMidi: n
             aria-label={`${stepName(after)}-диез, он же ${stepName((after + 1) % 7)}-бемоль${outOfRange(midi) ? ", вне диапазона скрипки" : ""}`}
             aria-pressed={active}
             className={cn(
-              "absolute top-0 h-[58%] w-[9.5%] -translate-x-1/2 rounded-b-[5px] bg-ink outline-none active:opacity-80 focus-visible:ring-2 focus-visible:ring-ring",
+              "absolute top-0 h-[58%] w-[11%] -translate-x-1/2 rounded-b-[5px] bg-ink outline-none active:opacity-80 focus-visible:ring-2 focus-visible:ring-ring",
               active && "bg-select",
               outOfRange(midi) && "opacity-40",
             )}

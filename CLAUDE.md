@@ -16,6 +16,10 @@ npm run build      # tsc -b + vite build; must pass with no errors
 
 Then open the app (`npm run preview`) and try what you changed in a phone-sized window (390×844, touch). Playwright with Chromium is available in cloud sessions: `executablePath: '/opt/pw-browsers/chromium'`.
 
+## Design work
+
+The **Impeccable** skill is installed in `.claude/skills/impeccable` (with its agents in `.claude/agents` and detector hooks in `.claude/settings.json`); use `/impeccable` for design reviews and fixes. The last full audit and what was fixed: `docs/AUDIT.md`. The detector: `.claude/skills/impeccable/scripts/impeccable detect src/` (for live screens see the end of `docs/AUDIT.md`).
+
 ## Rules of the code
 
 - `src/lib/score.ts` holds every edit as a pure function `(score, cursor, …) → EditResult`; the editor hook only applies results. Put new editing behaviour there.

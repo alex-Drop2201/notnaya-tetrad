@@ -14,6 +14,7 @@ const MARGIN = { x: 42, top: 46, bottom: 46 };
 /** Staff size on paper relative to the engraving units. */
 const SCALE = 0.6;
 const SYSTEM_GAP = 14;
+const TITLE_LINE = 26;
 
 async function fetchBase64(url: string) {
   const bytes = new Uint8Array(await (await fetch(url)).arrayBuffer());
@@ -60,12 +61,17 @@ export async function exportPdf(score: Score) {
     systemGap: SYSTEM_GAP,
     maxPerSystem: 4,
     justifyLast: 0.3,
-    colors: { ink: black, selected: black, playing: black },
+    colors: { ink: black },
   };
   const systems = prepareLayout(score, measures, opts);
+  // A long title wraps onto more lines instead of running off the page.
+  doc.setFont("PTSerif", "bold");
+  doc.setFontSize(22);
+  const titleLines = doc.splitTextToSize(score.title, contentW - 40) as string[];
+  const titleExtra = (titleLines.length - 1) * TITLE_LINE;
   // Top right, as on printed parts: the composer, then who wrote this part.
   const credits = [score.composer, score.arranger && `Партия: ${score.arranger}`].filter(Boolean) as string[];
-  const headerHeight = (34 + (credits.length ? credits.length * 13 + 6 : 8)) / SCALE;
+  const headerHeight = (34 + titleExtra + (credits.length ? credits.length * 13 + 6 : 8)) / SCALE;
   const pages = paginate(systems, height, headerHeight, SYSTEM_GAP);
 
   const host = document.createElement("div");
@@ -82,10 +88,12 @@ export async function exportPdf(score: Score) {
         doc.setTextColor(0, 0, 0);
         doc.setFont("PTSerif", "bold");
         doc.setFontSize(22);
-        doc.text(score.title, PAGE.w / 2, MARGIN.top + 20, { align: "center" });
+        titleLines.forEach((line, i) => doc.text(line, PAGE.w / 2, MARGIN.top + 20 + i * TITLE_LINE, { align: "center" }));
         doc.setFont("PTSerif", "normal");
         doc.setFontSize(10);
-        credits.forEach((line, i) => doc.text(line, PAGE.w - MARGIN.x, MARGIN.top + 40 + i * 13, { align: "right" }));
+        credits.forEach((line, i) =>
+          doc.text(line, PAGE.w - MARGIN.x, MARGIN.top + 40 + titleExtra + i * 13, { align: "right" }),
+        );
         const partY = MARGIN.top + (headerHeight + (systems[0].above + 2) * 10) * SCALE;
         doc.setFontSize(10.5);
         doc.text(score.partName, MARGIN.x, partY + 3.5);

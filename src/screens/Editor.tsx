@@ -1,5 +1,6 @@
 import { Ellipsis, FileText, ListMusic, Redo2, Settings2, SkipBack, Trash, Undo2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { NavBar } from "@/components/layout";
 import { PdfSheet } from "@/components/PdfSheet";
@@ -18,7 +19,7 @@ import { useEditor } from "@/editor/useEditor";
 import { play, schedule, unlockAudio } from "@/lib/audio";
 import { navigate, paths } from "@/lib/router";
 import { isEmpty, nextCursor } from "@/lib/score";
-import { deleteScore, getScore, prefs } from "@/lib/storage";
+import { deleteScore, getScore, prefs, saveScore } from "@/lib/storage";
 import type { Cursor, Score } from "@/lib/types";
 
 const TAB_KEY = "nt.tab";
@@ -211,12 +212,23 @@ function Editor({ initial, params }: { initial: Score; params: URLSearchParams }
       <ConfirmDialog
         open={deleteOpen}
         title={`Удалить «${score.title}»?`}
-        description="Партия исчезнет с этого телефона без возможности вернуть."
+        description="Партия исчезнет с этого телефона. Сразу после удаления её можно вернуть."
         onCancel={() => setDeleteOpen(false)}
         onConfirm={async () => {
           stop();
-          await deleteScore(score.id);
+          actions.discardPendingSave();
+          const deleted = score;
+          await deleteScore(deleted.id);
           navigate(paths.library(), { replace: true });
+          toast("Партия удалена", {
+            action: {
+              label: "Вернуть",
+              onClick: async () => {
+                await saveScore(deleted);
+                navigate(paths.editor(deleted.id));
+              },
+            },
+          });
         }}
       />
     </div>

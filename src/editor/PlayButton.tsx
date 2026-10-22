@@ -66,6 +66,7 @@ export function PlayButton({ playing, onPressStart, onPlay, onStop }: PlayButton
     >
       <span
         aria-hidden
+        data-progress
         className={cn(
           "absolute inset-0 origin-center rounded-full bg-select-soft",
           holding ? "scale-100 transition-transform ease-linear" : "scale-0 transition-none",
