@@ -38,7 +38,7 @@ src/
   editor/       editor state, staff, piano, toolbar
   screens/      library, new part, part settings, editor
   components/   shared UI; ui/ holds the shadcn primitives
-public/         service worker, manifest, icons, violin samples
+public/         manifest, icons, violin samples (src/sw.js is the service worker template)
 deploy/         README and CLAUDE.md copied into the `main` branch on deploy
 scripts/        deploy script; scripts/samples: how the violin samples were made
 docs/AUDIT.md   design audit (Impeccable) and what was fixed

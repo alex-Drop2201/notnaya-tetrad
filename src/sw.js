@@ -1,23 +1,24 @@
-// Offline cache for the installed app. On install it caches every built file
-// listed in precache-manifest.json, plus samples and fonts, so the editor,
-// sound and PDF all work without a connection. A new deploy ships a new
-// manifest version, which replaces the old cache.
+// Offline cache for the installed app. The build (vite.config.ts) writes its version and
+// file list into this worker, so every deploy changes sw.js: the browser installs the new
+// worker, which caches the new files and drops the old cache. Until then the old worker
+// keeps serving the old version, which is what makes the app work offline.
 // Paths are relative to the worker's folder, so the app works at a domain root or in a subfolder.
 const PREFIX = "nt-";
+const VERSION = "__VERSION__";
+const FILES = __FILES__;
 const at = (p) => new URL(p, self.location.href).href;
 const EXTRA = [
   "./", "index.html", "manifest.webmanifest",
   "icons/icon.svg", "icons/apple-touch-icon.png", "icons/icon-192.png", "icons/icon-512.png",
-  ...["G3","Bb3","Db4","E4","G4","Bb4","Db5","E5","G5","Bb5","Db6","E6","G6","Bb6","Db7","E7"].map((n) => `samples/violin/${n}.mp3`),
-].map(at);
+  ...["G3","Bb3","Db4","E4","G4","Bb4","Db5","E5","G5","Bb5","Db6","E6","G6","Bb6","Db7","E7"].map((n) => `samples/violin-nonvib/${n}.mp3`),
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
-      const res = await fetch(at("precache-manifest.json"), { cache: "no-store" });
-      const { version, files } = await res.json();
-      const cache = await caches.open(PREFIX + version);
-      await cache.addAll([...EXTRA, ...files.map(at)]);
+      const cache = await caches.open(PREFIX + VERSION);
+      // "reload" skips the HTTP cache, so a file that kept its name is fetched fresh.
+      await cache.addAll([...EXTRA, ...FILES].map((p) => new Request(at(p), { cache: "reload" })));
       await self.skipWaiting();
     })(),
   );
@@ -27,8 +28,7 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
       const keys = await caches.keys();
-      const current = (await caches.keys()).filter((k) => k.startsWith(PREFIX)).sort().pop();
-      await Promise.all(keys.filter((k) => k.startsWith(PREFIX) && k !== current).map((k) => caches.delete(k)));
+      await Promise.all(keys.filter((k) => k.startsWith(PREFIX) && k !== PREFIX + VERSION).map((k) => caches.delete(k)));
       await self.clients.claim();
     })(),
   );

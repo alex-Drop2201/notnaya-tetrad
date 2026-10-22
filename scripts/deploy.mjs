@@ -30,7 +30,11 @@ try {
   if (out("git status --porcelain", work) === "") {
     console.log("The build is the same as what is already deployed. Nothing to do.");
   } else {
-    sh(`git commit -q -m "Deploy build of ${label}"`, { cwd: work });
+    // DEPLOY_TRAILERS: optional extra lines for the commit message (e.g. Co-Authored-By).
+    const trailers = process.env.DEPLOY_TRAILERS ? `\n\n${process.env.DEPLOY_TRAILERS}` : "";
+    fs.writeFileSync(path.join(work, ".git-message"), `Deploy build of ${label}${trailers}\n`);
+    sh(`git commit -q -F .git-message`, { cwd: work });
+    fs.rmSync(path.join(work, ".git-message"));
     sh("git push origin HEAD:main", { cwd: work });
     console.log(`Deployed ${label}. GitHub Pages updates in a minute or two.`);
   }

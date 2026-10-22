@@ -3,7 +3,7 @@ import { midiOf } from "./pitch";
 import { visibleMeasures } from "./score";
 import type { Cursor, Score } from "./types";
 
-// Playback with violin samples (public/samples/violin, one every minor third, without
+// Playback with violin samples (public/samples/violin-nonvib, one every minor third, without
 // vibrato, 6 s long). Each note plays the nearest sample, re-pitched; notes longer than
 // a sample loop its steady part.
 
@@ -122,7 +122,7 @@ function loadSamples() {
   const ctx = audio();
   loading = Promise.all(
     SAMPLES.map(async ([name, midi]) => {
-      const data = await (await fetch(`./samples/violin/${name}.mp3`)).arrayBuffer();
+      const data = await (await fetch(`./samples/violin-nonvib/${name}.mp3`)).arrayBuffer();
       buffers.set(midi, await ctx.decodeAudioData(data));
     }),
   ).then(() => undefined);

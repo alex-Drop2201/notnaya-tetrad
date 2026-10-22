@@ -1,23 +1,25 @@
+import { readFileSync } from "node:fs";
 import { fileURLToPath, URL } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 
-// Writes precache-manifest.json next to the build. The service worker (public/sw.js)
-// reads it on install and caches every listed file, so the installed app works offline.
-// A new version number on each build makes the worker replace the old cache.
-function precacheManifest(): Plugin {
+// Writes the service worker (src/sw.js) into the build with this build's version and the
+// list of built files. The worker caches them on install, so the installed app works
+// offline; the new version makes the browser install the new worker on the next visit.
+function serviceWorker(): Plugin {
   return {
-    name: "precache-manifest",
+    name: "service-worker",
     apply: "build",
     generateBundle(_, bundle) {
       const files = Object.keys(bundle)
         .filter((f) => f.startsWith("assets/") && !f.endsWith(".map"))
         .sort((a, b) => order(a) - order(b) || a.localeCompare(b));
+      const template = readFileSync(fileURLToPath(new URL("./src/sw.js", import.meta.url)), "utf8");
       this.emitFile({
         type: "asset",
-        fileName: "precache-manifest.json",
-        source: JSON.stringify({ version: Date.now(), files }),
+        fileName: "sw.js",
+        source: template.replace("__VERSION__", String(Date.now())).replace("__FILES__", JSON.stringify(files)),
       });
     },
   };
@@ -31,7 +33,7 @@ function order(file: string) {
 
 export default defineConfig({
   base: "./",
-  plugins: [react(), tailwindcss(), precacheManifest()],
+  plugins: [react(), tailwindcss(), serviceWorker()],
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },
