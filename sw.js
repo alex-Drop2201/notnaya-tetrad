@@ -4,13 +4,13 @@
 // keeps serving the old version, which is what makes the app work offline.
 // Paths are relative to the worker's folder, so the app works at a domain root or in a subfolder.
 const PREFIX = "nt-";
-const VERSION = "1792654922554";
-const FILES = ["assets/index-CawTUYPe.js","assets/html2canvas-DfqXte2a.js","assets/index.es-_znmWp6e.js","assets/jspdf.es.min-D_bMYAEz.js","assets/purify.es-Dqk5qvad.js","assets/svg2pdf.es.min-B_gGm_jV.js","assets/PTSerif-Bold-B6NPSmF9.ttf","assets/PTSerif-Regular-HIZd4K6A.ttf","assets/index-DYzK3-O2.css"];
+const VERSION = "1792740674098";
+const FILES = ["assets/index-DgBVdXGb.js","assets/html2canvas-DONuLduB.js","assets/index.es-CXt5Pqlm.js","assets/jspdf.es.min-LL3Fw5IT.js","assets/purify.es-Dqk5qvad.js","assets/svg2pdf.es.min-XkaAZwvU.js","assets/PTSerif-Bold-B6NPSmF9.ttf","assets/PTSerif-Regular-HIZd4K6A.ttf","assets/index-DYzK3-O2.css"];
 const at = (p) => new URL(p, self.location.href).href;
 const EXTRA = [
   "./", "index.html", "manifest.webmanifest",
   "icons/icon.svg", "icons/apple-touch-icon.png", "icons/icon-192.png", "icons/icon-512.png",
-  ...["G3","Bb3","Db4","E4","G4","Bb4","Db5","E5","G5","Bb5","Db6","E6","G6","Bb6","Db7","E7"].map((n) => `samples/violin-nonvib/${n}.mp3`),
+  ...["G3","Bb3","Db4","E4","G4","Bb4","Db5","E5","G5","Bb5","Db6","E6","G6","Bb6","Db7","E7"].map((n) => `samples/violin-plain/${n}.mp3`),
 ];
 
 self.addEventListener("install", (event) => {
