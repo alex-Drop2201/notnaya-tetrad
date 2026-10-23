@@ -10,7 +10,7 @@ const at = (p) => new URL(p, self.location.href).href;
 const EXTRA = [
   "./", "index.html", "manifest.webmanifest",
   "icons/icon.svg", "icons/apple-touch-icon.png", "icons/icon-192.png", "icons/icon-512.png",
-  ...["G3","Bb3","Db4","E4","G4","Bb4","Db5","E5","G5","Bb5","Db6","E6","G6","Bb6","Db7","E7"].map((n) => `samples/violin-nonvib/${n}.mp3`),
+  ...["G3","Bb3","Db4","E4","G4","Bb4","Db5","E5","G5","Bb5","Db6","E6","G6","Bb6","Db7","E7"].map((n) => `samples/violin-plain/${n}.mp3`),
 ];
 
 self.addEventListener("install", (event) => {

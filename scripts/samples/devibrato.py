@@ -5,8 +5,12 @@ For each note:
    (multiply by a complex tone at the note's frequency, low-pass, take the phase slope);
 2. the sound is re-read at a varying speed that cancels that wobble ("varispeed"), so the
    waveform itself is untouched and the timbre stays the same; this also tunes to A440;
-3. the loudness wobble that comes with vibrato is evened out with a slow gain curve;
-4. the steady part is extended to LENGTH seconds with phase-aligned crossfades,
+3. the timbre wobble is evened out: with vibrato every overtone swells and fades 5-6 times
+   a second as it moves across the body resonances, and that is what still sounds like
+   vibrato once the pitch is steady. Each overtone's level and the bow noise are smoothed
+   (the pitch is left alone); the attack and the slow changes of the bow are kept;
+4. the loudness wobble that is left is evened out with a slow gain curve;
+5. the steady part is extended to LENGTH seconds with phase-aligned crossfades,
    so long notes play without looping.
 """
 import sys
@@ -100,6 +104,74 @@ def flatten(x, f_nom):
     return sinc_resample(x, pos), f0, k
 
 
+def mavg(x, n):
+    """Centred moving average, O(len) via cumulative sums, edges held."""
+    n = max(1, int(n)) | 1
+    pad = np.pad(x, (n // 2 + 1, n // 2), mode="edge")
+    c = np.cumsum(pad)
+    return (c[n:] - c[:-n]) / n
+
+
+def lowpass(x, cutoff, times=3):
+    """Cascade of moving averages; the first null is at `cutoff` Hz."""
+    for _ in range(times):
+        x = mavg(x, SR / cutoff)
+    return x
+
+
+def steady_timbre(y, f0, attack=0.25, fade=0.2, track=30.0, smooth=1.6):
+    """Smooths the level of each overtone (keeps its phase), so the timbre stops wobbling.
+
+    For overtone h, its complex envelope is found by heterodyning at h*f0 and low-passing at
+    `track` Hz. The envelope's magnitude is then low-passed at `smooth` Hz, which removes the
+    5-6 Hz swell of vibrato but keeps the slower shape of the bow. What is not an overtone
+    (bow noise) gets the same smoothing per frequency bin. The attack stays original and
+    fades into the result.
+    """
+    t = np.arange(len(y)) / SR
+    harmonic = np.zeros(len(y))
+    smoothed = np.zeros(len(y))
+    h = 1
+    while h * f0 < min(16000, SR / 2 - 1000):
+        carrier = np.exp(2j * np.pi * h * f0 * t)
+        z = y * np.conj(carrier)
+        z = lowpass(z.real, track) + 1j * lowpass(z.imag, track)
+        mag = np.abs(z)
+        level = np.exp(lowpass(np.log(mag + 1e-7), smooth, times=4))
+        zs = level * np.exp(1j * np.angle(z))
+        harmonic += 2 * np.real(z * carrier)
+        smoothed += 2 * np.real(zs * carrier)
+        h += 1
+    out = steady_noise(y - harmonic, smooth) + smoothed
+    w = np.clip((t - attack) / fade, 0, 1)
+    return y * (1 - w) + out * w
+
+
+def steady_noise(r, smooth, win=2048, hop=256):
+    """The same for the bow noise: each frequency bin's level is low-passed in time."""
+    window = np.hanning(win)
+    n = 1 + (len(r) - win) // hop
+    pad = np.pad(r, (0, win + hop))
+    frames = np.stack([pad[i * hop: i * hop + win] * window for i in range(n + 1)])
+    spec = np.fft.rfft(frames, axis=1)
+    mag = np.abs(spec) + 1e-9
+    frames_per_s = SR / hop
+    logm = np.log(mag)
+    k = max(1, int(frames_per_s / smooth)) | 1
+    for _ in range(4):
+        p = np.pad(logm, ((k // 2 + 1, k // 2), (0, 0)), mode="edge")
+        c = np.cumsum(p, axis=0)
+        logm = (c[k:] - c[:-k]) / k
+    spec = np.exp(logm) * np.exp(1j * np.angle(spec))
+    out = np.zeros(len(pad))
+    norm = np.zeros(len(pad))
+    back = np.fft.irfft(spec, win, axis=1)
+    for i in range(n + 1):
+        out[i * hop: i * hop + win] += back[i] * window
+        norm[i * hop: i * hop + win] += window ** 2
+    return (out / np.maximum(norm, 1e-6))[: len(r)]
+
+
 def moving(x, n):
     n = max(1, int(n))
     pad = np.pad(x, (n, n), mode="edge")
@@ -117,7 +189,7 @@ def even_loudness(y, attack=0.2):
     return y * (1 + ramp * (g - 1))
 
 
-def extend(y, f0, start=0.7, end_margin=0.3, fade=0.15):
+def extend(y, f0, start=0.7, end_margin=0.3, fade=0.3):
     """Repeats the steady part with crossfades until LENGTH seconds."""
     s, e = int(start * SR), int(len(y) - end_margin * SR)
     steady = y[s:e]
@@ -131,8 +203,8 @@ def extend(y, f0, start=0.7, end_margin=0.3, fade=0.15):
         off = int(round(phase))
         best, score = off, -2
         for cand in range(max(0, off - 8), off + 9):
-            a, b = out[n:n + 512], steady[cand:cand + 512]
-            if len(b) < 512:
+            a, b = out[n:n + 4096], steady[cand:cand + 4096]
+            if len(b) < 4096:
                 continue
             c = np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-12)
             if c > score:
@@ -169,6 +241,7 @@ def main(src, dst):
         y, _, _ = flatten(y, f_nom)  # second pass takes out what the smoothed tracker missed
         mid = f0[int(0.4 * SR): int(min(len(f0), 2.6 * SR))]
         cents = 1200 * np.log2(mid / f_nom)
+        y = steady_timbre(y, f_nom)
         y = even_loudness(y)
         y = extend(y, f_nom)
         results[name] = y
