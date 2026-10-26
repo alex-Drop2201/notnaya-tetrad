@@ -22,6 +22,9 @@ export interface ScoreFormValue {
   time: TimeSignature;
   tempo: number;
   measures: number;
+  /** Names of the two staves; only for a score with a second staff. */
+  partName?: string;
+  secondName?: string;
 }
 
 const RELATIVE_MINOR: Record<number, string> = {
@@ -126,6 +129,27 @@ export function ScoreForm({ value, onChange, mode, titleError, timeChanged }: Sc
         <p id="title-error" className="-mt-4 px-8 text-footnote text-destructive">
           Введите название песни
         </p>
+      )}
+
+      {value.secondName !== undefined && (
+        <Group title="Две партии" footer="Названия стоят перед нотными строками в PDF.">
+          <Row label="Верхняя">
+            <Input
+              value={value.partName ?? ""}
+              onChange={(e) => set("partName", e.target.value)}
+              placeholder="Скрипка 1"
+              className="text-right"
+            />
+          </Row>
+          <Row label="Нижняя">
+            <Input
+              value={value.secondName}
+              onChange={(e) => set("secondName", e.target.value)}
+              placeholder="Скрипка 2"
+              className="text-right"
+            />
+          </Row>
+        </Group>
       )}
 
       <Group title="Тональность" footer={`${capitalize(keyTitle(value.keyFifths))} или ${RELATIVE_MINOR[value.keyFifths]}`}>

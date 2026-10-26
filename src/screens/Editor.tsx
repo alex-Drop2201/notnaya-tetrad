@@ -1,4 +1,4 @@
-import { Ellipsis, FileText, ListMusic, Redo2, Settings2, SkipBack, Trash, Undo2 } from "lucide-react";
+import { Ellipsis, FileText, ListMusic, Redo2, Rows2, Settings2, SkipBack, Trash, Undo2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -18,7 +18,7 @@ import { Toolbar, type ToolTab } from "@/editor/Toolbar";
 import { useEditor } from "@/editor/useEditor";
 import { play, schedule, unlockAudio } from "@/lib/audio";
 import { navigate, paths } from "@/lib/router";
-import { isEmpty, nextCursor } from "@/lib/score";
+import { hasMusic, repairStaves } from "@/lib/score";
 import { deleteScore, getScore, prefs, saveScore } from "@/lib/storage";
 import type { Cursor, Score } from "@/lib/types";
 
@@ -27,7 +27,7 @@ const TAB_KEY = "nt.tab";
 export function EditorScreen({ id, params }: { id: string; params: URLSearchParams }) {
   const [score, setScore] = useState<Score | null | undefined>(undefined);
   useEffect(() => {
-    getScore(id).then((s) => setScore(s ?? null));
+    getScore(id).then((s) => setScore(s ? repairStaves(s) : null));
   }, [id]);
 
   if (score === undefined) return <div className="h-full bg-background" aria-busy />;
@@ -47,7 +47,7 @@ export function EditorScreen({ id, params }: { id: string; params: URLSearchPara
   return <Editor key={`${score.id}:${params.toString()}`} initial={score} params={params} />;
 }
 
-/** `?sel=3.2` selects the 2nd event of measure 3. */
+/** `?sel=3.2` selects the 2nd event of measure 3; `&staff=2` on the second staff. */
 function parseSelection(sel: string | null): Cursor | undefined {
   if (!sel) return;
   const [m, e] = sel.split(".").map(Number);
@@ -55,7 +55,7 @@ function parseSelection(sel: string | null): Cursor | undefined {
 }
 
 function Editor({ initial, params }: { initial: Score; params: URLSearchParams }) {
-  const editor = useEditor(initial, parseSelection(params.get("sel")));
+  const editor = useEditor(initial, parseSelection(params.get("sel")), params.get("staff") === "2" ? 1 : 0);
   const { score, cursor, actions } = editor;
   const [tab, setTabState] = useState<ToolTab>(() => (params.get("tab") || prefs.get(TAB_KEY) || "keys") as ToolTab);
   const setTab = (t: ToolTab) => {
@@ -67,6 +67,7 @@ function Editor({ initial, params }: { initial: Score; params: URLSearchParams }
   const player = useRef<{ stop: () => void } | null>(null);
   const [pdfOpen, setPdfOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [removeSecondOpen, setRemoveSecondOpen] = useState(false);
   const scroller = useRef<HTMLElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [titleVisible, setTitleVisible] = useState(true);
@@ -92,7 +93,7 @@ function Editor({ initial, params }: { initial: Score; params: URLSearchParams }
     if (playing) return stop();
     unlockAudio();
     setPlaying(true);
-    player.current = await play(schedule(score, from), setPlayhead, () => {
+    player.current = await play(schedule(score, from, editor.staff), setPlayhead, () => {
       setPlaying(false);
       setPlayhead(null);
       player.current = null;
@@ -100,7 +101,8 @@ function Editor({ initial, params }: { initial: Score; params: URLSearchParams }
   };
 
   /** From the selected note; from the beginning if nothing is written from there on. */
-  const playFromSelection = () => togglePlay(hasMusicFrom(score, cursor) ? cursor : undefined);
+  const playFromSelection = () =>
+    togglePlay(schedule(score, cursor, editor.staff).some((s) => s.midi !== null) ? cursor : undefined);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -171,6 +173,26 @@ function Editor({ initial, params }: { initial: Score; params: URLSearchParams }
                 >
                   <Settings2 /> Параметры партии
                 </DropdownMenuItem>
+                {score.second ? (
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      stop();
+                      if (hasMusic(score.second!.measures)) setRemoveSecondOpen(true);
+                      else actions.removeSecondStaff();
+                    }}
+                  >
+                    <Rows2 /> Убрать вторую партию
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      stop();
+                      actions.addSecondStaff();
+                    }}
+                  >
+                    <Rows2 /> Добавить вторую партию
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}>
                   <Trash /> Удалить партию
@@ -195,6 +217,7 @@ function Editor({ initial, params }: { initial: Score; params: URLSearchParams }
           </header>
           <Staff
             score={score}
+            staff={editor.staff}
             cursor={cursor}
             after={editor.after}
             playing={playhead}
@@ -209,6 +232,17 @@ function Editor({ initial, params }: { initial: Score; params: URLSearchParams }
       </main>
       <Toolbar editor={editor} tab={tab} onTab={setTab} onUndo={actions.undo} />
       <PdfSheet score={pdfOpen ? score : null} onClose={() => setPdfOpen(false)} />
+      <ConfirmDialog
+        open={removeSecondOpen}
+        title="Убрать вторую партию?"
+        description={`Строка «${score.second?.name ?? ""}» и всё, что в ней написано, исчезнут. Вернуть можно сразу кнопкой «Отменить».`}
+        confirmLabel="Убрать"
+        onCancel={() => setRemoveSecondOpen(false)}
+        onConfirm={() => {
+          setRemoveSecondOpen(false);
+          actions.removeSecondStaff();
+        }}
+      />
       <ConfirmDialog
         open={deleteOpen}
         title={`Удалить «${score.title}»?`}
@@ -233,10 +267,4 @@ function Editor({ initial, params }: { initial: Score; params: URLSearchParams }
       />
     </div>
   );
-}
-
-function hasMusicFrom(score: Score, from: Cursor) {
-  for (let c: Cursor | null = from; c; c = nextCursor(score, c))
-    if (!isEmpty(score.measures[c.m].events[c.e])) return true;
-  return false;
 }

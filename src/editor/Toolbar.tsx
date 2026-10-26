@@ -127,7 +127,17 @@ export function Toolbar({ editor, tab, onTab, onUndo }: ToolbarProps) {
               )}
             </div>
           ) : (
-            <p className="truncate text-center text-subhead text-muted-foreground">{status}</p>
+            <p className="truncate text-center text-subhead text-muted-foreground">
+              {score.second && (
+                <span
+                  className="mr-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-[5px] bg-fill px-1 text-caption font-semibold text-foreground"
+                  aria-label={`${editor.staff === 0 ? score.partName : score.second.name},`}
+                >
+                  {editor.staff + 1}
+                </span>
+              )}
+              {status}
+            </p>
           )}
         </div>
         {!shown && (

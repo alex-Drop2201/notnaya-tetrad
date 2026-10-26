@@ -47,6 +47,17 @@ export interface TimeSignature {
   symbol?: "common" | "cut";
 }
 
+/**
+ * A second part written on a staff under the first one and played together with it
+ * (двойная партия). It has as many measures as the first staff; repeat signs are those
+ * of the first staff.
+ */
+export interface SecondStaff {
+  /** Printed before the staff, like `Score.partName` for the first one. */
+  name: string;
+  measures: Measure[];
+}
+
 export interface Score {
   schemaVersion: 1;
   id: string;
@@ -59,9 +70,14 @@ export interface Score {
   keyFifths: number;
   time: TimeSignature;
   measures: Measure[];
+  /** Added later, so parts saved before it simply don't have it. */
+  second?: SecondStaff;
   createdAt: string;
   updatedAt: string;
 }
+
+/** 0 is the first (upper) staff, 1 the second. */
+export type StaffIndex = 0 | 1;
 
 /** Position of an event: measure index and event index inside it. */
 export interface Cursor {

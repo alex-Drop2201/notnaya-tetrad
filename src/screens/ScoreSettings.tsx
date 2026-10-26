@@ -25,6 +25,8 @@ export function ScoreSettings({ id }: { id: string }) {
           time: s.time,
           tempo: s.tempo,
           measures: s.measures.length,
+          partName: s.second ? s.partName : undefined,
+          secondName: s.second?.name,
         });
     });
   }, [id]);
@@ -46,6 +48,7 @@ export function ScoreSettings({ id }: { id: string }) {
     value.arranger !== score.arranger ||
     value.keyFifths !== score.keyFifths ||
     value.tempo !== score.tempo ||
+    (!!score.second && (value.partName !== score.partName || value.secondName !== score.second.name)) ||
     timeChanged ||
     (value.time.symbol ?? "") !== (score.time.symbol ?? "");
 
@@ -61,6 +64,10 @@ export function ScoreSettings({ id }: { id: string }) {
       arranger: value.arranger.trim(),
       tempo: value.tempo,
     };
+    if (score.second) {
+      next.partName = value.partName?.trim() || score.partName;
+      next.second = { ...score.second, name: value.secondName?.trim() || score.second.name };
+    }
     if (value.keyFifths !== score.keyFifths) next = changeKey(next, value.keyFifths);
     next = timeChanged ? changeTime(next, value.time) : { ...next, time: value.time };
     next.updatedAt = new Date().toISOString();

@@ -8,6 +8,7 @@ import {
   Formatter,
   Renderer,
   Stave,
+  StaveConnector,
   StaveNote,
   StaveTie,
   Voice,
@@ -22,10 +23,19 @@ import type { Measure, NoteEvent, Pitch, Score } from "./types";
 // then drawn as SVG. The same code draws the editor, the previews and the PDF pages.
 // Every note's SVG group gets the id `vf-<event id>`, so the editor can highlight the
 // selected or playing note with a class instead of drawing the score again.
+//
+// With two staves (`staves` has two measure lists of the same length) each system has
+// both, joined by a bracket, and their measures are formatted together so that notes
+// sounding at the same time stand one above the other. Each staff is drawn in an SVG
+// group with the class `vf-nt-staff-<index>`.
 
 /** Diatonic position of the top staff line, F5. */
 export const STAFF_TOP = 38;
 const SPACE = 10;
+/** Extra room between the two staves of a system. */
+const STAFF_GAP = 6;
+/** Room left of the staves for the bracket that joins them. */
+const BRACKET_ROOM = 12;
 
 export interface StaffColors {
   ink: string;
@@ -47,12 +57,13 @@ export interface EngraveOptions {
   editor?: boolean;
 }
 
-/** One drawn line of staff, in unscaled coordinates. */
+/** One drawn line of staff (or of both staves), in unscaled coordinates. */
 export interface SystemBox {
   index: number;
   top: number;
   bottom: number;
-  staffTop: number;
+  /** Top line of each staff, first staff first. */
+  staffTops: number[];
   spacing: number;
   x0: number;
   x1: number;
@@ -63,6 +74,7 @@ export interface SystemBox {
 export interface Hit {
   m: number;
   e: number;
+  staff: number;
   system: number;
   x0: number;
   x1: number;
@@ -100,16 +112,22 @@ function accidentalsFor(measures: Measure[], fifths: number) {
   return shown;
 }
 
-interface BuiltMeasure {
-  index: number;
+/** One measure of one staff, ready to draw. */
+interface BuiltStaff {
   notes: StaveNote[];
   voice: Voice;
   beams: Beam[];
-  minWidth: number;
   /** Lowest and highest notes, in staff spaces below the top line. */
   lowest: number;
   highest: number;
   hasFinger: boolean;
+}
+
+/** One measure of the score: a built measure per staff. */
+interface BuiltMeasure {
+  index: number;
+  staves: BuiltStaff[];
+  minWidth: number;
 }
 
 function restNote(ev: NoteEvent) {
@@ -136,7 +154,7 @@ function pitchedNote(ev: NoteEvent, accidental: string | undefined) {
   return note;
 }
 
-function buildMeasure(score: Score, measure: Measure, index: number, accidentals: Map<string, string>): BuiltMeasure {
+function buildStaff(score: Score, measure: Measure, accidentals: Map<string, string>): BuiltStaff {
   let lowest = 4;
   let highest = 0;
   let hasFinger = false;
@@ -160,18 +178,28 @@ function buildMeasure(score: Score, measure: Measure, index: number, accidentals
   voice.setMode(Voice.Mode.SOFT);
   voice.addTickables(notes);
   return {
-    index,
     notes,
     voice,
     beams: Beam.generateBeams(
       notes.filter((_, i) => !measure.events[i].rest),
       { groups: Beam.getDefaultBeamGroups(`${score.time.beats}/${score.time.beatType}`) },
     ),
-    minWidth: new Formatter().joinVoices([voice]).preCalculateMinTotalWidth([voice]),
     lowest,
     highest,
     hasFinger,
   };
+}
+
+/** Formatter for one measure: the voices of all staves together, so their beats line up. */
+function formatterFor(staves: BuiltStaff[]) {
+  const formatter = new Formatter();
+  for (const s of staves) formatter.joinVoices([s.voice]);
+  return formatter;
+}
+
+function buildMeasure(score: Score, staves: Measure[][], index: number, accidentals: Map<string, string>): BuiltMeasure {
+  const built = staves.map((ms) => buildStaff(score, ms[index], accidentals));
+  return { index, staves: built, minWidth: formatterFor(built).preCalculateMinTotalWidth(built.map((s) => s.voice)) };
 }
 
 /** Where notes start after the clef, key and (on the first line) time signature. */
@@ -190,9 +218,8 @@ interface SystemLayout {
   measures: BuiltMeasure[];
   widths: number[];
   x0: number;
-  /** Room above and below the staff, in staff spaces. */
-  above: number;
-  below: number;
+  /** Room above and below each staff, in staff spaces. */
+  staves: { above: number; below: number }[];
   /** First system: height of the tempo mark's baseline above the top line, in staff spaces. */
   tempoAt: number;
 }
@@ -204,12 +231,14 @@ function layoutSystems(score: Score, built: BuiltMeasure[], opts: EngraveOptions
   const firstStart = staveStartX(score, true);
   const nextStart = staveStartX(score, false);
   const max = opts.maxPerSystem ?? 4;
+  const staffCount = built[0]?.staves.length ?? 1;
+  const bracket = staffCount > 1 ? BRACKET_ROOM : 0;
   const lines: BuiltMeasure[][] = [];
   let line: BuiltMeasure[] = [];
   let lineWidth = 0;
   for (const m of built) {
     const first = lines.length === 0;
-    const start = (first ? (opts.firstIndent ?? 0) : 0) + (first ? firstStart : nextStart);
+    const start = (first ? (opts.firstIndent ?? 0) : 0) + bracket + (first ? firstStart : nextStart);
     const w = measureWidth(m);
     if (line.length > 0 && (start + lineWidth + w > opts.width || line.length >= max)) {
       lines.push(line);
@@ -221,39 +250,60 @@ function layoutSystems(score: Score, built: BuiltMeasure[], opts: EngraveOptions
   }
   if (line.length) lines.push(line);
   return lines.map((ms, i) => {
-    const indent = i === 0 ? (opts.firstIndent ?? 0) : 0;
+    const indent = (i === 0 ? (opts.firstIndent ?? 0) : 0) + bracket;
     const start = i === 0 ? firstStart : nextStart;
     const natural = ms.map(measureWidth);
     const total = natural.reduce((a, b) => a + b, 0);
     const room = opts.width - indent - start;
     const stretch =
       i !== lines.length - 1 || total / room > (opts.justifyLast ?? 0.6) ? room / total : Math.min(1.25, room / total);
-    const lowest = Math.max(...ms.map((m) => m.lowest));
-    const highest = Math.min(...ms.map((m) => m.highest));
-    const finger = ms.some((m) => m.hasFinger) ? 1.6 : 0;
-    const above = Math.max(3, -highest + 3.5 + finger);
     // The tempo mark stands over the first measure: above its highest note and fingering.
-    const first = ms[0];
+    const first = ms[0].staves[0];
     const tempoAt = Math.max(TEMPO_DEFAULT, -first.highest + 0.6 + (first.hasFinger ? 1.8 : 0) + 0.9);
+    const staves = Array.from({ length: staffCount }, (_, k) => {
+      const parts = ms.map((m) => m.staves[k]);
+      const lowest = Math.max(...parts.map((p) => p.lowest));
+      const highest = Math.min(...parts.map((p) => p.highest));
+      const finger = parts.some((p) => p.hasFinger) ? 1.6 : 0;
+      const above = Math.max(3, -highest + 3.5 + finger);
+      return {
+        above: i === 0 && k === 0 ? Math.max(above, tempoAt + 2.1) : above,
+        below: Math.max(2.5, lowest - 4 + 3),
+      };
+    });
     return {
       measures: ms,
       widths: natural.map((w, j) => w * stretch + (j === 0 ? start : 0)),
       x0: indent,
-      above: i === 0 ? Math.max(above, tempoAt + 2.1) : above,
-      below: Math.max(2.5, lowest - 4 + 3),
+      staves,
       tempoAt,
     };
   });
 }
 
 function systemHeight(s: SystemLayout) {
-  return (s.above + 4 + s.below) * SPACE;
+  return s.staves.reduce((h, st) => h + (st.above + 4 + st.below) * SPACE, 0) + (s.staves.length - 1) * STAFF_GAP;
+}
+
+/** Top line of each staff of a system that starts at `y`. */
+function staffTopsOf(s: SystemLayout, y: number) {
+  let at = y;
+  return s.staves.map((st) => {
+    const top = at + st.above * SPACE;
+    at += (st.above + 4 + st.below) * SPACE + STAFF_GAP;
+    return top;
+  });
+}
+
+/** Middle of each staff of the first system, measured from the top of the system. */
+export function firstStaffMiddles(systems: SystemLayout[]) {
+  return staffTopsOf(systems[0], 0).map((t) => t + 2 * SPACE);
 }
 
 function drawSystems(
   ctx: RenderContext,
   score: Score,
-  measures: Measure[],
+  staves: Measure[][],
   systems: SystemLayout[],
   opts: EngraveOptions,
   top: number,
@@ -262,101 +312,128 @@ function drawSystems(
   const boxes: SystemBox[] = [];
   const hits: Hit[] = [];
   const drawn = new Map<string, { note: StaveNote; system: number }>();
-  const last = measures.length - 1;
+  const main = staves[0];
+  const last = main.length - 1;
   let y = top;
   for (let si = range[0]; si < range[1]; si++) {
     const sys = systems[si];
-    const staveY = y + (sys.above - 4) * SPACE;
+    const staffTops = staffTopsOf(sys, y);
+    // Staves of every measure, per staff, then each measure formatted across the staves.
+    const rows: Stave[][] = staffTops.map(() => []);
     let x = sys.x0;
-    const staves: Stave[] = [];
     sys.measures.forEach((bm, j) => {
-      const measure = measures[bm.index];
-      const stave = new Stave(x, staveY, sys.widths[j], { fill_style: opts.colors.ink });
-      if (j === 0) {
-        stave.addClef("treble").addKeySignature(KEY_SPECS[score.keyFifths]);
-        if (si === 0) {
-          stave.addTimeSignature(timeSpec(score));
-          stave.setTempo({ duration: "q", bpm: score.tempo }, -4 - (sys.tempoAt - TEMPO_DEFAULT) * SPACE);
-        }
-      } else stave.setBegBarType(BarlineType.NONE);
-      if (measure.repeatStart) stave.setBegBarType(BarlineType.REPEAT_BEGIN);
-      if (measure.repeatEnd) stave.setEndBarType(BarlineType.REPEAT_END);
-      else if (bm.index === last && opts.final !== false) stave.setEndBarType(BarlineType.END);
-      stave.setContext(ctx);
-      bm.voice.setStave(stave);
-      bm.notes.forEach((n) => n.setStave(stave));
-      new Formatter().joinVoices([bm.voice]).format([bm.voice], stave.getNoteEndX() - stave.getNoteStartX() - 12);
-      staves.push(stave);
+      const measure = main[bm.index];
+      bm.staves.forEach((part, k) => {
+        const stave = new Stave(x, staffTops[k] - 4 * SPACE, sys.widths[j], { fill_style: opts.colors.ink });
+        if (j === 0) {
+          stave.addClef("treble").addKeySignature(KEY_SPECS[score.keyFifths]);
+          if (si === 0) {
+            stave.addTimeSignature(timeSpec(score));
+            if (k === 0) stave.setTempo({ duration: "q", bpm: score.tempo }, -4 - (sys.tempoAt - TEMPO_DEFAULT) * SPACE);
+          }
+        } else stave.setBegBarType(BarlineType.NONE);
+        if (measure.repeatStart) stave.setBegBarType(BarlineType.REPEAT_BEGIN);
+        if (measure.repeatEnd) stave.setEndBarType(BarlineType.REPEAT_END);
+        else if (bm.index === last && opts.final !== false) stave.setEndBarType(BarlineType.END);
+        stave.setContext(ctx);
+        part.voice.setStave(stave);
+        part.notes.forEach((n) => n.setStave(stave));
+        rows[k].push(stave);
+      });
+      const first = rows[0][j];
+      formatterFor(bm.staves).format(
+        bm.staves.map((p) => p.voice),
+        first.getNoteEndX() - first.getNoteStartX() - 12,
+      );
       x += sys.widths[j];
     });
-    const staffTop = staves[0].getYForLine(0);
     boxes.push({
       index: si,
       top: y,
       bottom: y + systemHeight(sys),
-      staffTop,
+      staffTops,
       spacing: SPACE,
       x0: sys.x0,
       x1: x,
       measures: sys.measures.map((m) => m.index),
     });
-    sys.measures.forEach((bm, j) => {
-      const measure = measures[bm.index];
-      const stave = staves[j];
-      const centers = bm.notes.map((n) => n.getAbsoluteX() + n.getGlyphWidth() / 2);
-      bm.notes.forEach((note, e) => {
-        const ev = measure.events[e];
-        const color = opts.editor && isEmpty(ev) ? "transparent" : opts.colors.ink;
-        note.setStyle({ fillStyle: color, strokeStyle: color });
-        note.setLedgerLineStyle({ fillStyle: opts.colors.ink, strokeStyle: opts.colors.ink });
-        const x0 = e === 0 ? stave.getNoteStartX() - 6 : (centers[e - 1] + centers[e]) / 2;
-        const x1 = e === bm.notes.length - 1 ? stave.getX() + stave.getWidth() : (centers[e] + centers[e + 1]) / 2;
-        hits.push({
-          m: bm.index,
-          e,
-          system: si,
-          x0,
-          x1,
-          x: ev.full ? (stave.getNoteStartX() + stave.getNoteEndX()) / 2 : centers[e],
-          y: ev.rest ? null : note.getYs()[0],
-          rest: ev.rest,
+    staffTops.forEach((_, k) => {
+      ctx.openGroup(`nt-staff-${k}`);
+      sys.measures.forEach((bm, j) => {
+        const measure = staves[k][bm.index];
+        const part = bm.staves[k];
+        const stave = rows[k][j];
+        const centers = part.notes.map((n) => n.getAbsoluteX() + n.getGlyphWidth() / 2);
+        part.notes.forEach((note, e) => {
+          const ev = measure.events[e];
+          const color = opts.editor && isEmpty(ev) ? "transparent" : opts.colors.ink;
+          note.setStyle({ fillStyle: color, strokeStyle: color });
+          note.setLedgerLineStyle({ fillStyle: opts.colors.ink, strokeStyle: opts.colors.ink });
+          const x0 = e === 0 ? stave.getNoteStartX() - 6 : (centers[e - 1] + centers[e]) / 2;
+          const x1 = e === part.notes.length - 1 ? stave.getX() + stave.getWidth() : (centers[e] + centers[e + 1]) / 2;
+          hits.push({
+            m: bm.index,
+            e,
+            staff: k,
+            system: si,
+            x0,
+            x1,
+            x: ev.full ? (stave.getNoteStartX() + stave.getNoteEndX()) / 2 : centers[e],
+            y: ev.rest ? null : note.getYs()[0],
+            rest: ev.rest,
+          });
+          drawn.set(ev.id, { note, system: si });
         });
-        drawn.set(ev.id, { note, system: si });
+        stave.draw();
+        part.voice.draw(ctx, stave);
+        part.beams.forEach((b) => b.setContext(ctx).draw());
       });
-      stave.draw();
-      bm.voice.draw(ctx, stave);
-      bm.beams.forEach((b) => b.setContext(ctx).draw());
+      ctx.closeGroup();
     });
+    if (rows.length > 1) {
+      const [upper, lower] = [rows[0][0], rows[rows.length - 1][0]];
+      for (const type of [StaveConnector.type.BRACKET, StaveConnector.type.SINGLE_LEFT])
+        new StaveConnector(upper, lower)
+          .setType(type)
+          .setStyle({ fillStyle: opts.colors.ink, strokeStyle: opts.colors.ink })
+          .setContext(ctx)
+          .draw();
+    }
     const firstMeasure = sys.measures[0].index;
     if (si > 0) {
       ctx.save();
       ctx.setFont("Times", 10, "normal");
       ctx.setFillStyle(opts.colors.ink);
-      ctx.fillText(String(firstMeasure + 1), sys.x0 + 1, staffTop - 12);
+      // Over the bracket's hook when the staves are joined.
+      ctx.fillText(String(firstMeasure + 1), sys.x0 + 1, staffTops[0] - (rows.length > 1 ? 19 : 12));
       ctx.restore();
     }
     y += systemHeight(sys) + (opts.systemGap ?? 8);
   }
   // Ties and slurs: an arc from each event marked `tie` to the next written one.
-  const events = measures.flatMap((m) => m.events);
-  events.forEach((ev, i) => {
-    const next = events[i + 1];
-    if (!ev.tie || isEmpty(ev) || isEmpty(next)) return;
-    const from = drawn.get(ev.id);
-    const to = drawn.get(next.id);
-    if (!from && !to) return;
-    const style = { fillStyle: opts.colors.ink, strokeStyle: opts.colors.ink };
-    const tie = (first: StaveNote | null, lastNote: StaveNote | null) =>
-      new StaveTie({ first_note: first, last_note: lastNote, first_indices: [0], last_indices: [0] })
-        .setStyle(style)
-        .setContext(ctx)
-        .draw();
-    if (from && to && from.system === to.system) tie(from.note, to.note);
-    else {
-      // Tie broken by a line end: half a tie on each side.
-      if (from) tie(from.note, null);
-      if (to) tie(null, to.note);
-    }
+  staves.forEach((measures, k) => {
+    ctx.openGroup(`nt-staff-${k}`);
+    const events = measures.flatMap((m) => m.events);
+    events.forEach((ev, i) => {
+      const next = events[i + 1];
+      if (!ev.tie || isEmpty(ev) || isEmpty(next)) return;
+      const from = drawn.get(ev.id);
+      const to = drawn.get(next.id);
+      if (!from && !to) return;
+      const style = { fillStyle: opts.colors.ink, strokeStyle: opts.colors.ink };
+      const tie = (first: StaveNote | null, lastNote: StaveNote | null) =>
+        new StaveTie({ first_note: first, last_note: lastNote, first_indices: [0], last_indices: [0] })
+          .setStyle(style)
+          .setContext(ctx)
+          .draw();
+      if (from && to && from.system === to.system) tie(from.note, to.note);
+      else {
+        // Tie broken by a line end: half a tie on each side.
+        if (from) tie(from.note, null);
+        if (to) tie(null, to.note);
+      }
+    });
+    ctx.closeGroup();
   });
   return { layout: { systems: boxes, height: y - top }, hits };
 }
@@ -372,26 +449,27 @@ function fixSvgText(el: HTMLElement) {
   });
 }
 
-export function prepareLayout(score: Score, measures: Measure[], opts: EngraveOptions) {
-  const accidentals = accidentalsFor(measures, score.keyFifths);
+/** `staves`: the measures of each staff to draw, all of the same length. */
+export function prepareLayout(score: Score, staves: Measure[][], opts: EngraveOptions) {
+  const accidentals = new Map(staves.flatMap((ms) => [...accidentalsFor(ms, score.keyFifths)]));
   return layoutSystems(
     score,
-    measures.map((m, i) => buildMeasure(score, m, i, accidentals)),
+    staves[0].map((_, i) => buildMeasure(score, staves, i, accidentals)),
     opts,
   );
 }
 
 /** Draws the whole score into `el`, scaled by `scale`. */
-export function renderScore(el: HTMLElement, score: Score, measures: Measure[], scale: number, opts: EngraveOptions) {
+export function renderScore(el: HTMLElement, score: Score, staves: Measure[][], scale: number, opts: EngraveOptions) {
   el.innerHTML = "";
-  const systems = prepareLayout(score, measures, opts);
+  const systems = prepareLayout(score, staves, opts);
   const top = opts.topPad ?? 18;
   const height = systems.reduce((h, s) => h + systemHeight(s) + (opts.systemGap ?? 8), top) + 8;
   const renderer = new Renderer(el as HTMLDivElement, Renderer.Backends.SVG);
   renderer.resize(opts.width * scale, height * scale);
   const ctx = renderer.getContext();
   ctx.scale(scale, scale);
-  const result = drawSystems(ctx, score, measures, systems, opts, top);
+  const result = drawSystems(ctx, score, staves, systems, opts, top);
   fixSvgText(el);
   return result;
 }
@@ -418,7 +496,7 @@ export function paginate(systems: SystemLayout[], pageHeight: number, firstTop: 
 export function renderPage(
   el: HTMLElement,
   score: Score,
-  measures: Measure[],
+  staves: Measure[][],
   systems: SystemLayout[],
   range: [number, number],
   opts: EngraveOptions,
@@ -428,7 +506,7 @@ export function renderPage(
   el.innerHTML = "";
   const renderer = new Renderer(el as HTMLDivElement, Renderer.Backends.SVG);
   renderer.resize(size.width, size.height);
-  drawSystems(renderer.getContext(), score, measures, systems, opts, top, range);
+  drawSystems(renderer.getContext(), score, staves, systems, opts, top, range);
   fixSvgText(el);
   return el.querySelector("svg")!;
 }

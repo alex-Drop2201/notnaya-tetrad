@@ -1,21 +1,22 @@
 import { eventUnits, measureUnits } from "./durations";
 import { midiOf } from "./pitch";
-import { visibleMeasures } from "./score";
-import type { Cursor, Score } from "./types";
+import { visibleMeasures, visibleStaves } from "./score";
+import type { Cursor, Measure, Score, StaffIndex } from "./types";
 
 // Playback with violin samples (public/samples/violin-plain, one every minor third, without
 // vibrato, 6 s long). Each note plays the nearest sample, re-pitched; notes longer than
-// a sample loop its steady part.
+// a sample loop its steady part. With a second staff both staves play together.
 
 interface Step {
   start: number;
   duration: number;
   /** null for a rest. */
   midi: number | null;
-  /** Events this sound covers (a tied note covers several), for the playhead. */
+  /** Events this sound covers (a tied note covers several), for the playhead. Empty on the other staff. */
   at: { cursor: Cursor; start: number }[];
   /** Slurred to the next note: played connected, without a gap. */
   legato?: boolean;
+  staff: StaffIndex;
 }
 
 /** Order of measures with repeats unfolded; each repeat is taken once. */
@@ -37,31 +38,58 @@ function playOrder(score: Score) {
   return order;
 }
 
-/** Sounds to play from `from`, in seconds. Tied notes become one sound. */
-export function schedule(score: Score, from: Cursor = { m: 0, e: 0 }): Step[] {
-  const measures = visibleMeasures(score);
+/**
+ * Sounds to play from `from`, an event of `staff`, in seconds; tied notes become one
+ * sound. Every staff plays from the same moment; a note of the other staff that is
+ * already sounding there is played for the time it has left. Only `staff` moves the playhead.
+ */
+export function schedule(score: Score, from: Cursor = { m: 0, e: 0 }, staff: StaffIndex = 0): Step[] {
+  const staves = visibleStaves(score);
   const perMeasure = measureUnits(score.time);
   const unitSeconds = 60 / score.tempo / 4;
   const order = playOrder(score);
-  const startAt = Math.max(0, order.indexOf(Math.min(from.m, measures.length - 1)));
+  const m0 = Math.min(from.m, staves[0].length - 1);
+  const startAt = Math.max(0, order.indexOf(m0));
+  const own = staves[staff] ?? staves[0];
+  let offset = 0;
+  own[m0].events.forEach((ev, e) => e < from.e && (offset += eventUnits(ev, perMeasure)));
+  return staves.flatMap((measures, k) =>
+    staffSteps(measures, order.slice(startAt), offset, perMeasure, unitSeconds, k as StaffIndex, k === staff),
+  );
+}
+
+function staffSteps(
+  measures: Measure[],
+  order: number[],
+  offset: number,
+  perMeasure: number,
+  unitSeconds: number,
+  staff: StaffIndex,
+  marks: boolean,
+): Step[] {
   const steps: Step[] = [];
   let t = 0;
   let open: Step | null = null;
-  order.slice(startAt).forEach((m, k) => {
+  order.forEach((m, k) => {
+    let at = 0;
     measures[m].events.forEach((ev, e) => {
-      if (k === 0 && e < from.e) return;
-      const duration = eventUnits(ev, perMeasure) * unitSeconds;
-      const cursor = { m, e };
+      const units = eventUnits(ev, perMeasure);
+      at += units;
+      // In the first measure only what still sounds after `offset`.
+      const left = k === 0 ? Math.min(units, at - offset) : units;
+      if (left <= 0) return;
+      const duration = left * unitSeconds;
+      const mark = marks && left === units ? [{ cursor: { m, e }, start: t }] : [];
       if (ev.rest) {
-        steps.push({ start: t, duration, midi: null, at: [{ cursor, start: t }] });
+        steps.push({ start: t, duration, midi: null, at: mark, staff });
         open = null;
       } else if (open && open.midi === midiOf(ev.pitch!)) {
         open.duration += duration;
-        open.at.push({ cursor, start: t });
+        open.at.push(...mark);
         open.legato = ev.tie;
         if (!ev.tie) open = null;
       } else {
-        const step: Step = { start: t, duration, midi: midiOf(ev.pitch!), at: [{ cursor, start: t }], legato: ev.tie };
+        const step: Step = { start: t, duration, midi: midiOf(ev.pitch!), at: mark, legato: ev.tie, staff };
         steps.push(step);
         open = ev.tie ? step : null;
       }
@@ -198,12 +226,14 @@ export async function play(steps: Step[], onCursor: (c: Cursor | null) => void, 
   await loadSamples();
   const ctx = audio();
   const t0 = ctx.currentTime + 0.12;
+  // Two violins together are quieter each, so that they don't sum into clipping.
+  const volume = steps.some((s) => s.staff === 1) ? 0.55 : 0.8;
   // Detached notes leave a short breath between bow strokes; slurred ones join the next.
   const voices = steps
     .filter((s) => s.midi !== null)
-    .map((s) => playNote(s.midi!, t0 + s.start, s.legato ? s.duration + 0.03 : s.duration * 0.97));
-  const marks = steps.flatMap((s) => s.at);
-  const total = steps.length ? steps[steps.length - 1].start + steps[steps.length - 1].duration : 0;
+    .map((s) => playNote(s.midi!, t0 + s.start, s.legato ? s.duration + 0.03 : s.duration * 0.97, volume));
+  const marks = steps.flatMap((s) => s.at).sort((a, b) => a.start - b.start);
+  const total = Math.max(0, ...steps.map((s) => s.start + s.duration));
   let frame = 0;
   let stopped = false;
   let shown = -1;

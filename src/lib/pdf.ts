@@ -1,9 +1,13 @@
-import { paginate, prepareLayout, renderPage, type EngraveOptions } from "./engrave";
-import { visibleMeasures } from "./score";
-import type { Score } from "./types";
+import { firstStaffMiddles, paginate, prepareLayout, renderPage, type EngraveOptions } from "./engrave";
+import { staffView, visibleStaves } from "./score";
+import type { Score, StaffIndex } from "./types";
 
 // A4 PDF: title centered, composer and arranger in the top right corner, part name before
-// the first system, title and page number in the footer of the following pages.
+// the first system, title and page number in the footer of the following pages. A score
+// with two staves prints both together, each name before its staff, or one staff alone.
+
+/** What to print of a score with two staves. */
+export type PdfChoice = "both" | StaffIndex;
 
 const fontRegularUrl = new URL("../assets/fonts/PTSerif-Regular.ttf", import.meta.url).href;
 const fontBoldUrl = new URL("../assets/fonts/PTSerif-Bold.ttf", import.meta.url).href;
@@ -29,10 +33,13 @@ function pdfFilename(score: Score) {
       .trim()
       .replace(/[\\/:*?"<>|]+/g, " ")
       .replace(/\s+/g, " ") || "Партия";
-  return `${title} — ${score.partName}.pdf`;
+  return `${title} — ${score.second ? "две партии" : score.partName}.pdf`;
 }
 
-export async function exportPdf(score: Score) {
+export async function exportPdf(original: Score, which: PdfChoice = "both") {
+  // One staff alone prints as a part of its own, under its name.
+  const score = !original.second || which === "both" ? original : { ...staffView(original, which), second: undefined };
+  const names = score.second ? [score.partName, score.second.name] : [score.partName];
   const [{ jsPDF }, { svg2pdf }, regular, bold] = await Promise.all([
     import("jspdf"),
     import("svg2pdf.js"),
@@ -44,7 +51,7 @@ export async function exportPdf(score: Score) {
   doc.addFont("PTSerif-Regular.ttf", "PTSerif", "normal");
   doc.addFileToVFS("PTSerif-Bold.ttf", bold);
   doc.addFont("PTSerif-Bold.ttf", "PTSerif", "bold");
-  doc.setProperties({ title: score.title, subject: score.partName, creator: "Нотная тетрадь" });
+  doc.setProperties({ title: score.title, subject: names.join(", "), creator: "Нотная тетрадь" });
 
   const contentW = PAGE.w - MARGIN.x * 2;
   const contentH = PAGE.h - MARGIN.top - MARGIN.bottom;
@@ -52,8 +59,8 @@ export async function exportPdf(score: Score) {
   const height = contentH / SCALE;
   doc.setFont("PTSerif", "normal");
   doc.setFontSize(10.5);
-  const partNameWidth = doc.getTextWidth(score.partName) + 8;
-  const measures = visibleMeasures(score);
+  const partNameWidth = Math.max(...names.map((n) => doc.getTextWidth(n))) + 8;
+  const staves = visibleStaves(score);
   const black = "#000000";
   const opts: EngraveOptions = {
     width,
@@ -63,7 +70,7 @@ export async function exportPdf(score: Score) {
     justifyLast: 0.3,
     colors: { ink: black },
   };
-  const systems = prepareLayout(score, measures, opts);
+  const systems = prepareLayout(score, staves, opts);
   // A long title wraps onto more lines instead of running off the page.
   doc.setFont("PTSerif", "bold");
   doc.setFontSize(22);
@@ -81,7 +88,7 @@ export async function exportPdf(score: Score) {
     for (let page = 0; page < pages.systems.length; page++) {
       if (page > 0) doc.addPage("a4", "portrait");
       const top = page === 0 ? headerHeight : 0;
-      const svg = renderPage(host, score, measures, systems, pages.systems[page], opts, { width, height }, top);
+      const svg = renderPage(host, score, staves, systems, pages.systems[page], opts, { width, height }, top);
       svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
       await svg2pdf(svg, doc, { x: MARGIN.x, y: MARGIN.top, width: contentW, height: contentH });
       if (page === 0) {
@@ -94,9 +101,10 @@ export async function exportPdf(score: Score) {
         credits.forEach((line, i) =>
           doc.text(line, PAGE.w - MARGIN.x, MARGIN.top + 40 + titleExtra + i * 13, { align: "right" }),
         );
-        const partY = MARGIN.top + (headerHeight + (systems[0].above + 2) * 10) * SCALE;
         doc.setFontSize(10.5);
-        doc.text(score.partName, MARGIN.x, partY + 3.5);
+        firstStaffMiddles(systems).forEach((middle, k) =>
+          doc.text(names[k], MARGIN.x, MARGIN.top + (headerHeight + middle) * SCALE + 3.5),
+        );
       } else {
         doc.setFont("PTSerif", "normal");
         doc.setFontSize(9);

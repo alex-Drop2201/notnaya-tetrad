@@ -47,6 +47,8 @@ docs/AUDIT.md   design audit (Impeccable) and what was fixed
 
 Parts are stored only on the device (IndexedDB `notnaya-tetrad` / `scores`). The format is `Score` in `src/lib/types.ts` with `schemaVersion: 1`; keep it backward compatible.
 
+A part can have a second part on a staff under it (`Score.second`, «Добавить вторую партию» in the editor's menu): both staves are drawn joined by a bracket, play together and print together or one at a time. Edits of the second staff run on the score with its staves swapped (`staffView` in `src/lib/score.ts`); measures are added, copied and removed on both staves at once.
+
 ## History
 
 The original source was not in GitHub; only the build was. This source was reconstructed from that build (deminified by hand, same libraries and versions) and checked against it in a browser: the same 31-step editing scenario gives identical staff SVG, UI state and stored data.

@@ -14,7 +14,7 @@ export function ScorePreview({ score, width, scale = 0.62, height }: { score: Sc
   useEffect(() => {
     if (!ref.current || width <= 0) return;
     const measures = visibleMeasures(score).slice(0, 4);
-    const { layout } = renderScore(ref.current, score, measures, scale, {
+    const { layout } = renderScore(ref.current, score, [measures], scale, {
       width: width / scale,
       maxPerSystem: 4,
       topPad: 10,
@@ -25,7 +25,7 @@ export function ScorePreview({ score, width, scale = 0.62, height }: { score: Sc
     const staff = layout.systems[0];
     if (svg && staff && height) {
       // Staff middle at 58% of the box, leaving room for the tempo mark above it.
-      const shift = Math.min(0, height * 0.58 - (staff.staffTop + 2 * staff.spacing) * scale);
+      const shift = Math.min(0, height * 0.58 - (staff.staffTops[0] + 2 * staff.spacing) * scale);
       svg.style.marginTop = `${shift}px`;
     }
   }, [score, width, scale, colors, height]);

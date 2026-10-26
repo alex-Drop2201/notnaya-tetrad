@@ -13,9 +13,16 @@ export function measuresLabel(n: number) {
   return `${n} ${word}`;
 }
 
-/** «ре мажор · 4/4 · 12 тактов». */
+/** «ре мажор · 4/4 · 12 тактов», and «2 партии» for a score with a second staff. */
 export function scoreSummary(score: Score) {
-  return [keyTitle(score.keyFifths), timeLabel(score.time), measuresLabel(visibleMeasures(score).length)].join(" · ");
+  return [
+    keyTitle(score.keyFifths),
+    timeLabel(score.time),
+    measuresLabel(visibleMeasures(score).length),
+    score.second && "2 партии",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 const MONTHS = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];

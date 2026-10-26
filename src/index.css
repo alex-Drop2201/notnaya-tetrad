@@ -214,6 +214,13 @@
   stroke: var(--playing);
 }
 
+/* Two staves in the editor: the one not being written is faded (see editor/Staff.tsx). */
+[data-active-staff="0"] .vf-nt-staff-1,
+[data-active-staff="1"] .vf-nt-staff-0 {
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+
 /* Decorative motion off; progress that tells the user something (data-progress) keeps its timing. */
 @media (prefers-reduced-motion: reduce) {
   *:not([data-progress]),
