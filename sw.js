@@ -4,8 +4,8 @@
 // keeps serving the old version, which is what makes the app work offline.
 // Paths are relative to the worker's folder, so the app works at a domain root or in a subfolder.
 const PREFIX = "nt-";
-const VERSION = "1792740674098";
-const FILES = ["assets/index-DgBVdXGb.js","assets/html2canvas-DONuLduB.js","assets/index.es-CXt5Pqlm.js","assets/jspdf.es.min-LL3Fw5IT.js","assets/purify.es-Dqk5qvad.js","assets/svg2pdf.es.min-XkaAZwvU.js","assets/PTSerif-Bold-B6NPSmF9.ttf","assets/PTSerif-Regular-HIZd4K6A.ttf","assets/index-DYzK3-O2.css"];
+const VERSION = "1793035094128";
+const FILES = ["assets/index-BVfjViZQ.js","assets/html2canvas-6m8wtr0B.js","assets/index.es-DIjS7ZjJ.js","assets/jspdf.es.min-DDpA1JP0.js","assets/purify.es-Dqk5qvad.js","assets/svg2pdf.es.min-BQPL64g6.js","assets/PTSerif-Bold-B6NPSmF9.ttf","assets/PTSerif-Regular-HIZd4K6A.ttf","assets/index-8GXpl18J.css"];
 const at = (p) => new URL(p, self.location.href).href;
 const EXTRA = [
   "./", "index.html", "manifest.webmanifest",
